@@ -1,0 +1,74 @@
+[
+  {
+    "id": "C29H3-T1",
+    "nombre": "Calle 29H3 · Tramo Occidental",
+    "sector": "Calle 29H3",
+    "tipo_via": "arterial",
+    "lat": 11.2234,
+    "lng": -74.1926,
+    "tramo": [
+      [11.2230, -74.1932],
+      [11.2239, -74.1919]
+    ]
+  },
+  {
+    "id": "C29H3-T2",
+    "nombre": "Calle 29H3 · Tramo Central",
+    "sector": "Calle 29H3",
+    "tipo_via": "arterial",
+    "lat": 11.2244,
+    "lng": -74.1909,
+    "tramo": [
+      [11.2239, -74.1919],
+      [11.2248, -74.1899]
+    ]
+  },
+  {
+    "id": "C29H3-T3",
+    "nombre": "Calle 29H3 · Tramo Oriental",
+    "sector": "Calle 29H3",
+    "tipo_via": "arterial",
+    "lat": 11.2254,
+    "lng": -74.1891,
+    "tramo": [
+      [11.2248, -74.1899],
+      [11.2260, -74.1884]
+    ]
+  },
+  {
+    "id": "VM-T1",
+    "nombre": "Villa Marbella · Sector Norte",
+    "sector": "Villa Marbella",
+    "tipo_via": "secundaria",
+    "lat": 11.2242,
+    "lng": -74.1912,
+    "tramo": [
+      [11.2245, -74.1918],
+      [11.2239, -74.1906]
+    ]
+  },
+  {
+    "id": "VM-T2",
+    "nombre": "Villa Marbella · Sector Parque",
+    "sector": "Villa Marbella",
+    "tipo_via": "secundaria",
+    "lat": 11.2236,
+    "lng": -74.1908,
+    "tramo": [
+      [11.2239, -74.1913],
+      [11.2233, -74.1903]
+    ]
+  },
+  {
+    "id": "VM-T3",
+    "nombre": "Villa Marbella · Sector Sur",
+    "sector": "Villa Marbella",
+    "tipo_via": "secundaria",
+    "lat": 11.2228,
+    "lng": -74.1904,
+    "tramo": [
+      [11.2233, -74.1910],
+      [11.2224, -74.1898]
+    ]
+  }
+]

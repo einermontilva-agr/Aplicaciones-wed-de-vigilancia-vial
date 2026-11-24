@@ -1,0 +1,6 @@
+{
+  "name": "Vigía Vial Santa Marta",
+  "description": "Aplicación web ciudadana y operativa para reportar mal parqueo e invasión del espacio público en Santa Marta, calcular criticidad y visualizar mapa de calor.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": []
+}
