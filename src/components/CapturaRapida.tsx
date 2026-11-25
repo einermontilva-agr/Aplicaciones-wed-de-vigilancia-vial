@@ -111,6 +111,7 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
   const [avisoPrivacidad, setAvisoPrivacidad] = useState<string>('');
   const [errorPrivacidad, setErrorPrivacidad] = useState<string>('');
   const [validacionFoto, setValidacionFoto] = useState<ResultadoValidacionFoto | null>(null);
+  const [confirmacionManualVehiculo, setConfirmacionManualVehiculo] = useState(false);
   const [errorValidacionServicio, setErrorValidacionServicio] = useState<string>('');
   const [validandoFoto, setValidandoFoto] = useState(false);
   const [procesandoFoto, setProcesandoFoto] = useState(false);
@@ -286,6 +287,7 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
     setValidandoFoto(true);
     setErrorValidacionServicio('');
     setValidacionFoto(null);
+    setConfirmacionManualVehiculo(false);
 
     const { resultado, error: errVal, servicioNoDisponible } = await validarEvidenciaFoto(
       baseOriginal,
@@ -387,6 +389,7 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
     setAvisoPrivacidad('');
     setErrorPrivacidad('');
     setValidacionFoto(null);
+    setConfirmacionManualVehiculo(false);
     setErrorValidacionServicio('');
     if (inputFotoRef.current) inputFotoRef.current.value = '';
   };
@@ -523,7 +526,7 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
     Boolean(fotoDataUrl) &&
     (validandoFoto ||
       procesandoFoto ||
-      (validacionFoto !== null && !validacionFoto.valida));
+      (validacionFoto !== null && !validacionFoto.valida && !confirmacionManualVehiculo));
 
   const manejarEnviar = (e: React.FormEvent) => {
     e.preventDefault();
@@ -539,10 +542,10 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
         setErrorForm('Espera un momento mientras termina el procesamiento de la fotografía.');
         return;
       }
-      if (validacionFoto !== null && !validacionFoto.valida) {
+      if (validacionFoto !== null && !validacionFoto.valida && !confirmacionManualVehiculo) {
         setErrorForm(
           validacionFoto.motivoRechazo ||
-            'No se detectaron vehículos en la fotografía. Toma una nueva foto que incluya al menos un vehículo o quítala para continuar.'
+            'No se detectaron vehículos en la fotografía. Toma una nueva foto, confirma manualmente si sí hay un vehículo, o quítala para continuar.'
         );
         return;
       }
@@ -566,7 +569,12 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
       ultima_confirmacion: fechaHora || obtenerFechaHoraLocalActual(),
       estado: 'activo',
       validacion_ia: validacionFoto
-        ? { valida: validacionFoto.valida, resumen: validacionFoto.resumen }
+        ? {
+            valida: validacionFoto.valida || confirmacionManualVehiculo,
+            resumen: confirmacionManualVehiculo
+              ? 'Presencia de vehículo confirmada manualmente por el usuario.'
+              : validacionFoto.resumen,
+          }
         : undefined,
       criticidad: {
         puntaje: desglose.puntaje,
@@ -1002,18 +1010,45 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
                         </div>
                       )}
 
-                  {!validandoFoto && validacionFoto && !validacionFoto.valida && (
+                  {!validandoFoto && validacionFoto && !validacionFoto.valida && !confirmacionManualVehiculo && (
                     <div className="flex items-start gap-2 border border-red-300 bg-red-50 px-3 py-2.5 text-xs text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
                       <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-[#DC2626] dark:text-red-400" />
-                      <div>
+                      <div className="flex-1">
                         <p className="font-semibold">
                           Fotografía rechazada · Envío bloqueado (sin vehículos)
                         </p>
                         <p className="mt-0.5">{validacionFoto.motivoRechazo}</p>
                         <p className="mt-1 text-[11px] opacity-85">
-                          Sube una fotografía donde se observe al menos un vehículo (aunque salga un poco borrosa) o quita la imagen para continuar.
+                          Sube una fotografía donde se observe al menos un vehículo o quita la imagen para continuar.
                         </p>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setConfirmacionManualVehiculo(true);
+                            setErrorForm('');
+                            if (fotoBaseOriginal) {
+                              await ejecutarDeteccionAutomatica(fotoBaseOriginal);
+                            }
+                          }}
+                          className="mt-2 inline-flex min-h-[34px] items-center gap-1.5 border border-red-400 bg-white px-3 py-1 text-[11px] font-semibold text-red-900 hover:bg-red-100 dark:border-red-700 dark:bg-slate-900 dark:text-red-200 dark:hover:bg-red-950 cursor-pointer"
+                        >
+                          Sí hay un vehículo en esta foto (usar de todas formas)
+                        </button>
                       </div>
+                    </div>
+                  )}
+
+                  {!validandoFoto && validacionFoto && !validacionFoto.valida && confirmacionManualVehiculo && (
+                    <div className="space-y-1 border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/35 dark:text-emerald-200">
+                      <div className="flex items-center gap-1.5 font-semibold">
+                        <ShieldCheck className="h-4 w-4 shrink-0 text-[#15803D] dark:text-emerald-400" />
+                        <span>Vehículo confirmado manualmente; fotografía lista para publicar.</span>
+                      </div>
+                      {avisoPrivacidad && (
+                        <p className="text-[11px] text-emerald-800 dark:text-emerald-300">
+                          {avisoPrivacidad}
+                        </p>
+                      )}
                     </div>
                   )}
 

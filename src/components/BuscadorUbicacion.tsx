@@ -92,8 +92,8 @@ export const BuscadorUbicacion: React.FC<BuscadorUbicacionProps> = ({
     onSeleccionarUbicacion(res);
   };
 
-  const manejarSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const manejarSubmit = async (e?: React.SyntheticEvent) => {
+    e?.preventDefault();
     const q = consulta.trim();
     if (q.length < 2) return;
 
@@ -115,7 +115,7 @@ export const BuscadorUbicacion: React.FC<BuscadorUbicacionProps> = ({
 
   return (
     <div ref={contenedorRef} className="relative w-full">
-      <form onSubmit={manejarSubmit} className="flex items-stretch gap-2">
+      <div className="flex items-stretch gap-2">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
           <input
@@ -125,6 +125,12 @@ export const BuscadorUbicacion: React.FC<BuscadorUbicacionProps> = ({
               if (resultados.length > 0) setAbierto(true);
             }}
             onChange={(e) => setConsulta(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                manejarSubmit();
+              }
+            }}
             placeholder={placeholder}
             aria-label="Buscador preciso de direcciones y coordenadas"
             className={`w-full border border-slate-300 bg-white pl-9 pr-9 text-slate-900 placeholder:text-slate-400 focus:border-[#0B3B69] focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-sky-500 ${
@@ -149,7 +155,8 @@ export const BuscadorUbicacion: React.FC<BuscadorUbicacionProps> = ({
         </div>
 
         <button
-          type="submit"
+          type="button"
+          onClick={() => manejarSubmit()}
           className={`flex items-center gap-1.5 bg-[#0B3B69] px-3.5 text-xs font-medium text-white hover:bg-[#082c4f] dark:bg-sky-700 dark:hover:bg-sky-600 whitespace-nowrap shrink-0 cursor-pointer ${
             compact ? 'min-h-[38px]' : 'min-h-[42px]'
           }`}
@@ -161,7 +168,7 @@ export const BuscadorUbicacion: React.FC<BuscadorUbicacionProps> = ({
           )}
           <span>Ubicar</span>
         </button>
-      </form>
+      </div>
 
       {ultimoSeleccionado && !abierto && (
         <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">

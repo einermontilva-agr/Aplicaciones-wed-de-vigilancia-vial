@@ -37,7 +37,7 @@ interface MapaSantaMartaProps {
   esOscuro?: boolean;
 }
 
-const CENTRO_ZONA_UNIMAG: [number, number] = [11.2241, -74.1908];
+const CENTRO_ZONA_UNIMAG: [number, number] = [11.22455, -74.19105];
 
 function colorPorNivel(nivel: string): string {
   if (nivel === 'Alto') return '#DC2626';
@@ -247,13 +247,16 @@ export const MapaSantaMarta: React.FC<MapaSantaMartaProps> = ({
     }
 
     if (!modoSeleccion && !yaAjustoLimitesRef.current && vias.length > 0 && !puntoEnfocado) {
-      const puntos = vias.flatMap((v) => v.tramo);
+      const puntos = [
+        ...vias.flatMap((v) => v.tramo),
+        ...reportes.map((r) => [r.lat, r.lng] as [number, number]),
+      ];
       if (puntos.length > 0) {
-        mapa.fitBounds(puntos, { padding: [28, 28], maxZoom: 16 });
+        mapa.fitBounds(puntos, { padding: [42, 42], maxZoom: 17 });
         yaAjustoLimitesRef.current = true;
       }
     }
-  }, [vias, verCuadras, modoSeleccion, esOscuro]);
+  }, [vias, reportes, verCuadras, modoSeleccion, esOscuro, puntoEnfocado]);
 
   // Capa de calor en tiempo real (HeatLayer de leaflet.heat) ponderada por criticidad, confirmaciones, antigüedad y estado
   useEffect(() => {
@@ -285,8 +288,8 @@ export const MapaSantaMarta: React.FC<MapaSantaMartaProps> = ({
 
     const opcionesCalor = {
       pane: 'heatmapPane',
-      radius: 22,
-      blur: 16,
+      radius: 19,
+      blur: 14,
       maxZoom: 17,
       max: 1.0,
       minOpacity: 0.14,

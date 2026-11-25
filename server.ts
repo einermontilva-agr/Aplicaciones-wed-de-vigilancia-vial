@@ -91,6 +91,20 @@ function crearClienteGenAI(): GoogleGenAI | null {
   });
 }
 
+async function conTimeout<T>(promesa: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promesa,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('503 UNAVAILABLE: Tiempo de espera agotado')), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function generarConRespaldo<T>(
   fn: (modelo: string) => Promise<T>
 ): Promise<T> {
@@ -100,7 +114,7 @@ async function generarConRespaldo<T>(
   for (const modelo of modelos) {
     for (let intento = 0; intento < 2; intento += 1) {
       try {
-        return await fn(modelo);
+        return await conTimeout(fn(modelo), 7500);
       } catch (err) {
         ultimoError = err;
         const msg = err instanceof Error ? err.message : String(err);
@@ -111,7 +125,7 @@ async function generarConRespaldo<T>(
           break; // Pasar al modelo de respaldo sin esperar
         }
         if (esTemporal503 && intento === 0) {
-          await new Promise((resolve) => setTimeout(resolve, 450));
+          await new Promise((resolve) => setTimeout(resolve, 350));
           continue;
         }
         if (!esTemporal503) {
@@ -279,12 +293,14 @@ async function startServer() {
               },
               {
                 text:
-                  `Analiza esta fotografía para verificar ÚNICAMENTE si incluye al menos un vehículo.\n\n` +
-                  `INSTRUCCIÓN CRÍTICA: NO rechaces ni penalices imágenes borrosas, desenfocadas, movidas, oscuras, pixeladas, con reflejos o de baja resolución. Aunque la fotografía salga borrosa o el vehículo aparezca parcialmente cortado, lejos o en una esquina, si se distingue al menos un vehículo o parte de él, DEBES aceptarla.\n\n` +
-                  `Evalúa un solo criterio:\n` +
-                  `- hayVehiculos: marca true si aparece o se distingue al menos un vehículo en cualquier lugar de la imagen (automóvil, taxi, camioneta, bus, camión, furgón, motocicleta, motocarro, bicicleta, o parte visible de su carrocería, llantas, faros o placa). Ante la mínima presencia vehicular, responde true. Marca false ÚNICAMENTE cuando sea totalmente seguro que NO hay ningún vehículo en toda la fotografía (por ejemplo: solo una mascota/animal, un retrato, comida, texto o un paisaje vacío sin vehículos).\n\n` +
-                  `Si hayVehiculos=false, escribe en "motivoRechazo" un mensaje breve en español indicando que no se observan vehículos en la fotografía y pidiendo subir una imagen que incluya al menos un vehículo.\n` +
-                  `Si hayVehiculos=true, deja "motivoRechazo" vacío ("") y escribe en "resumen" una descripción breve y genérica del vehículo observado en español (máx. 15 palabras), SIN transcribir números de placa ni identificar personas.`,
+                  `Analiza esta fotografía de calle o espacio público para verificar si aparece al menos un vehículo.\n\n` +
+                  `INSTRUCCIÓN CRÍTICA: NO rechaces imágenes borrosas, desenfocadas, movidas, oscuras, pixeladas, con reflejos o de baja resolución. Tampoco importa si el vehículo está lejos, parcial, cortado, de espaldas, de lado o estacionado junto a un andén.\n\n` +
+                  `Pasos obligatorios:\n` +
+                  `1. En "objetosVisibles", enumera TODOS los elementos reales que ves (ej: "automóvil gris", "motocicleta roja", "camión de carga", "taxi amarillo", "bus", "llanta", "calle", "andén", "gato", etc.).\n` +
+                  `2. En "hayAlgunVehiculoVisible": responde true si aparece o se distingue CUALQUIER vehículo o parte de un vehículo (carro, automóvil, taxi, camioneta, bus, buseta, camión, furgón, motocicleta, motocarro, bicicleta, llantas, placa o faros). Ante cualquier duda razonable, responde true.\n` +
+                  `3. En "esFotoSinVehiculosNiCalle": responde true ÚNICAMENTE si estás 100% seguro de que la foto NO tiene vehículos (por ejemplo: solo una mascota/gato, comida, retrato en interiores o texto).\n` +
+                  `4. Si hayAlgunVehiculoVisible=false y esFotoSinVehiculosNiCalle=true, escribe en "motivoRechazo" un mensaje breve en español indicando que no se observan vehículos en la fotografía.\n` +
+                  `5. Si hay vehículo visible, deja "motivoRechazo" vacío ("") y escribe en "resumen" una descripción genérica breve en español (máx. 15 palabras), SIN transcribir placas ni identificar personas.`,
               },
             ],
           },
@@ -296,20 +312,59 @@ async function startServer() {
             responseSchema: {
               type: Type.OBJECT,
               properties: {
-                hayVehiculos: { type: Type.BOOLEAN },
-                motivoRechazo: { type: Type.STRING },
+                objetosVisibles: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                },
                 resumen: { type: Type.STRING },
+                hayAlgunVehiculoVisible: { type: Type.BOOLEAN },
+                esFotoSinVehiculosNiCalle: { type: Type.BOOLEAN },
+                motivoRechazo: { type: Type.STRING },
               },
-              required: ['hayVehiculos', 'motivoRechazo', 'resumen'],
+              required: [
+                'objetosVisibles',
+                'resumen',
+                'hayAlgunVehiculoVisible',
+                'esFotoSinVehiculosNiCalle',
+                'motivoRechazo',
+              ],
             },
           },
         })
       );
 
-      const texto = (response.text ?? '{}').trim();
-      const parsed = JSON.parse(texto) as Record<string, unknown>;
+      const texto = (response.text ?? '').trim();
+      if (!texto) {
+        res.status(503).json({
+          servicioNoDisponible: true,
+          error: 'La verificación IA devolvió una respuesta vacía temporal.',
+        });
+        return;
+      }
 
-      const hayVehiculos = Boolean(parsed.hayVehiculos);
+      const parsed = JSON.parse(texto) as Record<string, unknown>;
+      if (typeof parsed.hayAlgunVehiculoVisible !== 'boolean') {
+        res.status(503).json({
+          servicioNoDisponible: true,
+          error: 'No se recibió confirmación booleana de la verificación IA.',
+        });
+        return;
+      }
+
+      const objetos = Array.isArray(parsed.objetosVisibles)
+        ? parsed.objetosVisibles.filter((x): x is string => typeof x === 'string')
+        : [];
+      const resumenRaw = typeof parsed.resumen === 'string' ? parsed.resumen.trim() : '';
+      const textoCombinado = `${objetos.join(' ')} ${resumenRaw}`.toLowerCase();
+      const mencionaVehiculo =
+        /\b(veh[ií]culo|carro|auto|autom[oó]vil|automotor|camioneta|campero|cami[oó]n|furg[oó]n|furgoneta|tractomula|volqueta|taxi|bus|buseta|buset[oó]n|microb[uú]s|colectivo|transporte|moto|motocicleta|mototaxi|motocarro|scooter|cuatrimoto|bicicleta|triciclo|sedan|suv|pickup|hatchback|truck|van|car|motorcycle|motorbike|bike|bicycle|vehicle|llanta|neum[aá]tico|rin|rueda|parabrisas|retrovisor|faro|farola|b[oó]mper|defensa|cap[oó]|carrocer[ií]a|cabina|remolque|plat[oó]n|parqueado|estacionado|doble fila|conductor|motociclista|wheel|tire|headlight|windshield)\b/i.test(
+          textoCombinado
+        );
+
+      const hayVehiculos =
+        parsed.hayAlgunVehiculoVisible === true ||
+        parsed.esFotoSinVehiculosNiCalle === false ||
+        mencionaVehiculo;
       const valida = hayVehiculos;
 
       let motivoRechazo =
@@ -321,8 +376,8 @@ async function startServer() {
       }
 
       const resumen =
-        typeof parsed.resumen === 'string' && parsed.resumen.trim()
-          ? parsed.resumen.trim()
+        resumenRaw
+          ? resumenRaw
           : valida
             ? 'Fotografía aceptada: presencia de vehículo verificada.'
             : '';

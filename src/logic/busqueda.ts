@@ -2,10 +2,10 @@ import { CuadraVia, ResultadoBusquedaUbicacion } from '../types';
 
 const REFERENCIAS_SANTA_MARTA: Omit<ResultadoBusquedaUbicacion, 'id'>[] = [
   {
-    nombre: 'Calle 29H3 con Carrera 21B',
+    nombre: 'Calle 29H3 con Carrera 21C2',
     detalle: 'Sector Calle 29H3 · Entorno Universidad del Magdalena, Santa Marta',
-    lat: 11.2244,
-    lng: -74.1909,
+    lat: 11.22462,
+    lng: -74.19122,
     tipo: 'direccion',
     zoom: 17,
   },
@@ -20,16 +20,16 @@ const REFERENCIAS_SANTA_MARTA: Omit<ResultadoBusquedaUbicacion, 'id'>[] = [
   {
     nombre: 'Barrio Villa Marbella',
     detalle: 'Zona residencial y parque · Junto a Calle 29H3, Santa Marta',
-    lat: 11.2236,
-    lng: -74.1908,
+    lat: 11.22395,
+    lng: -74.19098,
     tipo: 'barrio',
     zoom: 17,
   },
   {
     nombre: 'Parque de Villa Marbella',
     detalle: 'Villa Marbella · Sector Parque, Santa Marta',
-    lat: 11.2236,
-    lng: -74.1909,
+    lat: 11.22397,
+    lng: -74.19100,
     tipo: 'lugar',
     zoom: 18,
   },
