@@ -6,10 +6,14 @@ import {
   LocateFixed,
   MapPin,
   RotateCcw,
+  ShieldCheck,
   Trash2,
+  Undo2,
 } from 'lucide-react';
 import { calcularCriticidad } from '../logic/criticidad';
 import {
+  aplicarPixelacionEnZonas,
+  detectarZonasPrivacidad,
   encontrarCuadraMasCercana,
   generarNuevoIdReporte,
   procesarYAnonimizarFoto,
@@ -24,6 +28,7 @@ import {
   ETIQUETAS_VIA,
   Reporte,
   TipoActor,
+  ZonaPrivacidad,
 } from '../types';
 import { MapaSantaMarta } from './MapaSantaMarta';
 
@@ -86,9 +91,16 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
   const [actor, setActor] = useState<TipoActor>('mobiliario_comercial');
   const [observacion, setObservacion] = useState<string>('');
 
+  const [fotoBaseOriginal, setFotoBaseOriginal] = useState<string | undefined>(undefined);
   const [fotoDataUrl, setFotoDataUrl] = useState<string | undefined>(undefined);
   const [fotoMeta, setFotoMeta] = useState<{ width: number; height: number; sizeKB: number } | null>(null);
+  const [zonasPrivacidad, setZonasPrivacidad] = useState<ZonaPrivacidad[]>([]);
+  const [avisoPrivacidad, setAvisoPrivacidad] = useState<string>('');
+  const [errorPrivacidad, setErrorPrivacidad] = useState<string>('');
   const [procesandoFoto, setProcesandoFoto] = useState(false);
+  const [dibujoInicio, setDibujoInicio] = useState<{ x: number; y: number } | null>(null);
+  const [dibujoActual, setDibujoActual] = useState<{ x: number; y: number } | null>(null);
+  const previewContainerRef = useRef<HTMLDivElement | null>(null);
 
   const [estadoGps, setEstadoGps] = useState<string>('');
   const [buscandoGps, setBuscandoGps] = useState(false);
@@ -203,16 +215,58 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
     );
   };
 
+  const reconstruirConZonas = async (baseOriginal: string, zonas: ZonaPrivacidad[]) => {
+    const pixelada = await aplicarPixelacionEnZonas(baseOriginal, zonas, 11);
+    setFotoDataUrl(pixelada.dataUrl);
+    setFotoMeta({
+      width: pixelada.width,
+      height: pixelada.height,
+      sizeKB: pixelada.sizeKB,
+    });
+  };
+
+  const ejecutarDeteccionAutomatica = async (baseOriginal: string) => {
+    setProcesandoFoto(true);
+    setErrorPrivacidad('');
+    setAvisoPrivacidad('Detectando rostros y placas automáticamente...');
+
+    const { zonas, error } = await detectarZonasPrivacidad(baseOriginal);
+    setZonasPrivacidad(zonas);
+
+    if (error) {
+      setErrorPrivacidad(error);
+      setAvisoPrivacidad('Sin detección automática: dibuja un recuadro sobre rostros o placas si lo necesitas.');
+      await reconstruirConZonas(baseOriginal, []);
+      setProcesandoFoto(false);
+      return;
+    }
+
+    const rostros = zonas.filter((z) => z.tipo === 'rostro').length;
+    const placas = zonas.filter((z) => z.tipo === 'placa').length;
+    if (zonas.length === 0) {
+      setAvisoPrivacidad('No se detectaron rostros ni placas visibles; la foto se mantiene nítida.');
+    } else {
+      setAvisoPrivacidad(
+        `Pixelación selectiva aplicada: ${rostros} rostro(s) y ${placas} placa(s) protegidos.`
+      );
+    }
+
+    await reconstruirConZonas(baseOriginal, zonas);
+    setProcesandoFoto(false);
+  };
+
   const procesarFoto = async (file: File) => {
     setProcesandoFoto(true);
     setErrorForm('');
+    setErrorPrivacidad('');
     try {
       const res = await procesarYAnonimizarFoto(file, 0, 800);
+      setFotoBaseOriginal(res.dataUrl);
       setFotoDataUrl(res.dataUrl);
       setFotoMeta({ width: res.width, height: res.height, sizeKB: res.sizeKB });
+      await ejecutarDeteccionAutomatica(res.dataUrl);
     } catch (err) {
       setErrorForm(err instanceof Error ? err.message : 'Error al procesar la fotografía.');
-    } finally {
       setProcesandoFoto(false);
     }
   };
@@ -222,6 +276,76 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
     const archivo = e.target.files?.[0];
     if (!archivo) return;
     await procesarFoto(archivo);
+  };
+
+  const obtenerCoordNormalizada = (clientX: number, clientY: number) => {
+    const el = previewContainerRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    const x = Math.max(0, Math.min(1000, Math.round(((clientX - rect.left) / rect.width) * 1000)));
+    const y = Math.max(0, Math.min(1000, Math.round(((clientY - rect.top) / rect.height) * 1000)));
+    return { x, y };
+  };
+
+  const manejarPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!fotoBaseOriginal || procesandoFoto) return;
+    const pt = obtenerCoordNormalizada(e.clientX, e.clientY);
+    if (!pt) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDibujoInicio(pt);
+    setDibujoActual(pt);
+  };
+
+  const manejarPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dibujoInicio) return;
+    const pt = obtenerCoordNormalizada(e.clientX, e.clientY);
+    if (pt) setDibujoActual(pt);
+  };
+
+  const manejarPointerUp = async () => {
+    if (!dibujoInicio || !dibujoActual || !fotoBaseOriginal) {
+      setDibujoInicio(null);
+      setDibujoActual(null);
+      return;
+    }
+
+    const xmin = Math.min(dibujoInicio.x, dibujoActual.x);
+    const xmax = Math.max(dibujoInicio.x, dibujoActual.x);
+    const ymin = Math.min(dibujoInicio.y, dibujoActual.y);
+    const ymax = Math.max(dibujoInicio.y, dibujoActual.y);
+
+    setDibujoInicio(null);
+    setDibujoActual(null);
+
+    if (xmax - xmin < 15 || ymax - ymin < 15) return;
+
+    const nuevaZona: ZonaPrivacidad = {
+      id: `manual-${Date.now()}`,
+      tipo: 'manual',
+      xmin,
+      ymin,
+      xmax,
+      ymax,
+      origen: 'manual',
+    };
+
+    const actualizadas = [...zonasPrivacidad, nuevaZona];
+    setZonasPrivacidad(actualizadas);
+    await reconstruirConZonas(fotoBaseOriginal, actualizadas);
+    setAvisoPrivacidad(`Zona manual agregada (${actualizadas.length} área(s) pixelada(s)).`);
+  };
+
+  const manejarDeshacerUltimaZona = async () => {
+    if (!fotoBaseOriginal || zonasPrivacidad.length === 0) return;
+    const actualizadas = zonasPrivacidad.slice(0, -1);
+    setZonasPrivacidad(actualizadas);
+    await reconstruirConZonas(fotoBaseOriginal, actualizadas);
+    setAvisoPrivacidad(
+      actualizadas.length === 0
+        ? 'Se quitaron las zonas pixeladas; la fotografía vuelve a estar sin censura.'
+        : `Quedan ${actualizadas.length} área(s) pixelada(s).`
+    );
   };
 
   const manejarEnviar = (e: React.FormEvent) => {
@@ -256,8 +380,12 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
     onGuardarReporte(nuevoReporte);
     setUltimoGuardado({ reporte: nuevoReporte, duracionSegundos: duracion });
     setObservacion('');
+    setFotoBaseOriginal(undefined);
     setFotoDataUrl(undefined);
     setFotoMeta(null);
+    setZonasPrivacidad([]);
+    setAvisoPrivacidad('');
+    setErrorPrivacidad('');
     if (inputFotoRef.current) inputFotoRef.current.value = '';
   };
 
@@ -542,21 +670,27 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
               </div>
             </div>
 
-            {/* Carga de foto optimizada (nítida, sin desenfoque) */}
+            {/* Carga de foto con pixelación selectiva automática de rostros y placas */}
             <div className="border-t border-slate-100 pt-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-xs font-semibold text-slate-800">
-                    4. Foto opcional (máx. 800 px de ancho)
+                    4. Foto opcional (pixelación automática de rostros y placas)
                   </p>
                   <p className="text-[11px] text-slate-500">
-                    La imagen se conserva nítida y se ajusta a máx. 800 px para ahorrar almacenamiento.
+                    Detectamos rostros y placas al instante para pixelar solo esas zonas y mantener nítido el resto.
                   </p>
                 </div>
 
                 <label className="flex min-h-[44px] cursor-pointer items-center gap-2 border border-slate-300 bg-slate-50 px-3.5 py-2 text-xs font-medium text-slate-800 hover:bg-slate-100 whitespace-nowrap">
                   <Camera className="h-4 w-4 text-[#0B3B69]" />
-                  <span>{procesandoFoto ? 'Procesando...' : fotoDataUrl ? 'Cambiar foto' : 'Tomar o adjuntar foto'}</span>
+                  <span>
+                    {procesandoFoto
+                      ? 'Protegiendo foto...'
+                      : fotoDataUrl
+                        ? 'Cambiar foto'
+                        : 'Tomar o adjuntar foto'}
+                  </span>
                   <input
                     ref={inputFotoRef}
                     type="file"
@@ -569,30 +703,84 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
               </div>
 
               {fotoDataUrl && (
-                <div className="mt-3 border border-slate-200 bg-slate-50 p-3">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                <div className="mt-3 border border-slate-200 bg-slate-50 p-3 space-y-3">
+                  <div
+                    ref={previewContainerRef}
+                    onPointerDown={manejarPointerDown}
+                    onPointerMove={manejarPointerMove}
+                    onPointerUp={manejarPointerUp}
+                    className="relative mx-auto w-full max-w-md select-none overflow-hidden border border-slate-300 bg-slate-900 touch-none cursor-crosshair"
+                  >
                     <img
                       src={fotoDataUrl}
-                      alt="Vista previa de fotografía"
-                      className="h-36 w-full border border-slate-200 object-cover sm:w-48"
+                      alt="Evidencia con rostros y placas pixeladas"
+                      draggable={false}
+                      className="block h-auto w-full"
                     />
-                    <div className="flex-1 space-y-2 text-xs">
-                      <p className="font-medium text-[#15803D]">
-                        Foto cargada lista para guardar
+
+                    {dibujoInicio && dibujoActual && (
+                      <div
+                        className="pointer-events-none absolute border-2 border-[#0B3B69] bg-[#0B3B69]/20"
+                        style={{
+                          left: `${Math.min(dibujoInicio.x, dibujoActual.x) / 10}%`,
+                          top: `${Math.min(dibujoInicio.y, dibujoActual.y) / 10}%`,
+                          width: `${Math.abs(dibujoActual.x - dibujoInicio.x) / 10}%`,
+                          height: `${Math.abs(dibujoActual.y - dibujoInicio.y) / 10}%`,
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5 font-medium text-[#15803D]">
+                        <ShieldCheck className="h-4 w-4 shrink-0" />
+                        <span>{avisoPrivacidad || 'Foto lista para guardar'}</span>
+                      </div>
+                      {errorPrivacidad && (
+                        <p className="text-[11px] text-[#D97706]">{errorPrivacidad}</p>
+                      )}
+                      <p className="text-[11px] text-slate-500">
+                        {fotoMeta ? `${fotoMeta.width}×${fotoMeta.height} px · ${fotoMeta.sizeKB} KB · ` : ''}
+                        Arrastra sobre la foto si deseas pixelar manualmente una zona adicional.
                       </p>
-                      {fotoMeta && (
-                        <p className="font-mono text-slate-600 tabular-nums">
-                          {fotoMeta.width}×{fotoMeta.height} px · {fotoMeta.sizeKB} KB
-                        </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {fotoBaseOriginal && (
+                        <button
+                          type="button"
+                          disabled={procesandoFoto}
+                          onClick={() => ejecutarDeteccionAutomatica(fotoBaseOriginal)}
+                          className="inline-flex items-center gap-1 border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 cursor-pointer"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          Re-detectar
+                        </button>
+                      )}
+                      {zonasPrivacidad.length > 0 && (
+                        <button
+                          type="button"
+                          disabled={procesandoFoto}
+                          onClick={manejarDeshacerUltimaZona}
+                          className="inline-flex items-center gap-1 border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 cursor-pointer"
+                        >
+                          <Undo2 className="h-3.5 w-3.5" />
+                          Deshacer ({zonasPrivacidad.length})
+                        </button>
                       )}
                       <button
                         type="button"
                         onClick={() => {
+                          setFotoBaseOriginal(undefined);
                           setFotoDataUrl(undefined);
                           setFotoMeta(null);
+                          setZonasPrivacidad([]);
+                          setAvisoPrivacidad('');
+                          setErrorPrivacidad('');
                           if (inputFotoRef.current) inputFotoRef.current.value = '';
                         }}
-                        className="inline-flex items-center gap-1 text-xs font-medium text-[#DC2626] hover:underline cursor-pointer"
+                        className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-[#DC2626] hover:underline cursor-pointer"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                         Quitar foto

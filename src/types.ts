@@ -90,6 +90,16 @@ export interface RecomendacionCuadra {
   reglaTexto: string;
 }
 
+export interface ZonaPrivacidad {
+  id: string;
+  tipo: 'rostro' | 'placa' | 'manual';
+  ymin: number;
+  xmin: number;
+  ymax: number;
+  xmax: number;
+  origen: 'ia' | 'manual';
+}
+
 export const ETIQUETAS_CATEGORIA: Record<CategoriaObstruccion, string> = {
   doble_fila: 'Estacionamiento en vía prohibida o doble fila',
   bloqueo_rampa_cebra_paradero: 'Bloqueo de rampa peatonal, cebra o paradero',

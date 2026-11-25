@@ -1,4 +1,4 @@
-import { CuadraVia, Reporte } from '../types';
+import { CuadraVia, Reporte, ZonaPrivacidad } from '../types';
 
 const STORAGE_KEY_LOCAL = 'vigia_santa_marta_reportes_locales_v3_29h3_vm';
 
@@ -80,7 +80,7 @@ export function procesarYAnonimizarFoto(
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, anchoFinal, altoFinal);
 
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.86);
         const sizeKB = Math.round((dataUrl.length * 3) / 4 / 1024);
 
         resolve({
@@ -93,6 +93,129 @@ export function procesarYAnonimizarFoto(
       img.src = String(reader.result);
     };
     reader.readAsDataURL(archivo);
+  });
+}
+
+/**
+ * Envía la fotografía redimensionada al servidor para detectar automáticamente
+ * coordenadas de rostros humanos y placas vehiculares.
+ */
+export async function detectarZonasPrivacidad(
+  dataUrl: string
+): Promise<{ zonas: ZonaPrivacidad[]; error?: string }> {
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(dataUrl);
+  if (!match) {
+    return {
+      zonas: [],
+      error: 'Formato de imagen no compatible para detección automática.',
+    };
+  }
+
+  const [, mimeType, imagenBase64] = match;
+
+  try {
+    const resp = await fetch('/api/detectar-privacidad', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imagenBase64, mimeType }),
+    });
+
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      return {
+        zonas: [],
+        error:
+          typeof data?.error === 'string'
+            ? data.error
+            : 'No se pudo ejecutar la detección automática en el servidor.',
+      };
+    }
+
+    const zonas = Array.isArray(data?.zonas) ? (data.zonas as ZonaPrivacidad[]) : [];
+    return { zonas };
+  } catch {
+    return {
+      zonas: [],
+      error: 'Sin conexión con el servicio de detección automática. Puedes marcar zonas manualmente.',
+    };
+  }
+}
+
+/**
+ * Aplica pixelación irreversible únicamente dentro de las cajas delimitadoras de
+ * rostros y placas detectadas, manteniendo nítido el resto de la fotografía.
+ */
+export function aplicarPixelacionEnZonas(
+  dataUrlOriginal: string,
+  zonas: ZonaPrivacidad[],
+  tamanoBloque = 11
+): Promise<{ dataUrl: string; width: number; height: number; sizeKB: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onerror = () => reject(new Error('No se pudo procesar la imagen para pixelación.'));
+    img.onload = () => {
+      const width = img.width;
+      const height = img.height;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('No se pudo inicializar el lienzo de pixelación.'));
+        return;
+      }
+
+      // Dibujar la imagen base completamente nítida
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // Pixelar exclusivamente cada rostro y placa detectada
+      for (const z of zonas) {
+        const margenFactor = z.origen === 'ia' ? 0.06 : 0;
+        const anchoNorm = z.xmax - z.xmin;
+        const altoNorm = z.ymax - z.ymin;
+
+        const xmin = Math.max(0, z.xmin - anchoNorm * margenFactor);
+        const xmax = Math.min(1000, z.xmax + anchoNorm * margenFactor);
+        const ymin = Math.max(0, z.ymin - altoNorm * margenFactor);
+        const ymax = Math.min(1000, z.ymax + altoNorm * margenFactor);
+
+        const px = Math.floor((xmin / 1000) * width);
+        const py = Math.floor((ymin / 1000) * height);
+        const pw = Math.max(4, Math.ceil(((xmax - xmin) / 1000) * width));
+        const ph = Math.max(4, Math.ceil(((ymax - ymin) / 1000) * height));
+
+        const paso = Math.max(6, Math.min(20, tamanoBloque));
+        const cols = Math.max(3, Math.round(pw / paso));
+        const rows = Math.max(2, Math.round(ph / paso));
+
+        const temp = document.createElement('canvas');
+        temp.width = cols;
+        temp.height = rows;
+        const tempCtx = temp.getContext('2d');
+        if (!tempCtx) continue;
+
+        tempCtx.drawImage(img, px, py, pw, ph, 0, 0, cols, rows);
+
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(temp, 0, 0, cols, rows, px, py, pw, ph);
+        ctx.restore();
+      }
+
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      const sizeKB = Math.round((dataUrl.length * 3) / 4 / 1024);
+
+      resolve({
+        dataUrl,
+        width,
+        height,
+        sizeKB,
+      });
+    };
+    img.src = dataUrlOriginal;
   });
 }
 
