@@ -1,5 +1,9 @@
-import React, { useMemo, useState } from 'react';
-import { CheckCircle2, Eye, PlusCircle, Search, X } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import { CheckCircle2, Eye, Grid2x2, PlusCircle, Search, Sparkles, X } from 'lucide-react';
+import {
+  aplicarPixelacionEnZonas,
+  detectarZonasPrivacidad,
+} from '../logic/captura';
 import { calcularCriticidad, obtenerFranja } from '../logic/criticidad';
 import {
   CriteriosCriticidad,
@@ -11,6 +15,7 @@ import {
   ETIQUETAS_VIA,
   NivelCriticidad,
   Reporte,
+  ZonaPrivacidad,
 } from '../types';
 import { FotoAnonimizada } from './FotoAnonimizada';
 
@@ -20,6 +25,7 @@ interface TablaRegistrosProps {
   criterios: CriteriosCriticidad;
   onConfirmarReporte: (reporteId: string) => void;
   onToggleSolucionado: (reporteId: string) => void;
+  onActualizarFotoReporte?: (reporteId: string, nuevaFoto: string) => void;
 }
 
 export const TablaRegistros: React.FC<TablaRegistrosProps> = ({
@@ -28,11 +34,17 @@ export const TablaRegistros: React.FC<TablaRegistrosProps> = ({
   criterios,
   onConfirmarReporte,
   onToggleSolucionado,
+  onActualizarFotoReporte,
 }) => {
   const [busqueda, setBusqueda] = useState('');
   const [filtroNivel, setFiltroNivel] = useState<'todos' | NivelCriticidad>('todos');
   const [filtroFranja, setFiltroFranja] = useState<'todas' | 'pico' | 'valle'>('todas');
   const [reporteModalId, setReporteModalId] = useState<string | null>(null);
+  const [pixelandoModal, setPixelandoModal] = useState(false);
+  const [estadoPixelModal, setEstadoPixelModal] = useState('');
+  const [dibujoModalInicio, setDibujoModalInicio] = useState<{ x: number; y: number } | null>(null);
+  const [dibujoModalActual, setDibujoModalActual] = useState<{ x: number; y: number } | null>(null);
+  const modalFotoRef = useRef<HTMLDivElement | null>(null);
 
   const mapaVias = useMemo(() => new Map(vias.map((v) => [v.id, v])), [vias]);
 
@@ -70,6 +82,112 @@ export const TablaRegistros: React.FC<TablaRegistrosProps> = ({
     if (!reporteModal) return null;
     return calcularCriticidad(reporteModal, vias, criterios);
   }, [reporteModal, vias, criterios]);
+
+  const obtenerCoordModal = (clientX: number, clientY: number) => {
+    const el = modalFotoRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    return {
+      x: Math.max(0, Math.min(1000, Math.round(((clientX - rect.left) / rect.width) * 1000))),
+      y: Math.max(0, Math.min(1000, Math.round(((clientY - rect.top) / rect.height) * 1000))),
+    };
+  };
+
+  const manejarPixelarCompletoModal = async () => {
+    if (!reporteModal?.foto || !reporteModal.foto.startsWith('data:image/') || !onActualizarFotoReporte) return;
+    setPixelandoModal(true);
+    setEstadoPixelModal('');
+    try {
+      const zonaCompleta: ZonaPrivacidad = {
+        id: `full-${Date.now()}`,
+        tipo: 'manual',
+        xmin: 0,
+        ymin: 0,
+        xmax: 1000,
+        ymax: 1000,
+        origen: 'manual',
+      };
+      const res = await aplicarPixelacionEnZonas(reporteModal.foto, [zonaCompleta], 16);
+      onActualizarFotoReporte(reporteModal.id, res.dataUrl);
+      setEstadoPixelModal('Se pixeló toda la fotografía y se guardó el cambio.');
+    } finally {
+      setPixelandoModal(false);
+    }
+  };
+
+  const manejarPixelarIAModal = async () => {
+    if (!reporteModal?.foto || !reporteModal.foto.startsWith('data:image/') || !onActualizarFotoReporte) return;
+    setPixelandoModal(true);
+    setEstadoPixelModal('');
+    try {
+      const { zonas, error } = await detectarZonasPrivacidad(reporteModal.foto);
+      if (error) {
+        setEstadoPixelModal(error);
+        return;
+      }
+      if (zonas.length === 0) {
+        setEstadoPixelModal('No se detectaron rostros o placas adicionales; toca o arrastra sobre la foto para pixelar manualmente.');
+        return;
+      }
+      const res = await aplicarPixelacionEnZonas(reporteModal.foto, zonas, 15);
+      onActualizarFotoReporte(reporteModal.id, res.dataUrl);
+      setEstadoPixelModal(`Se pixelaron ${zonas.length} zona(s) detectada(s) automáticamente.`);
+    } finally {
+      setPixelandoModal(false);
+    }
+  };
+
+  const manejarPointerUpModal = async () => {
+    if (
+      !dibujoModalInicio ||
+      !dibujoModalActual ||
+      !reporteModal?.foto ||
+      !reporteModal.foto.startsWith('data:image/') ||
+      !onActualizarFotoReporte
+    ) {
+      setDibujoModalInicio(null);
+      setDibujoModalActual(null);
+      return;
+    }
+
+    const xmin = Math.min(dibujoModalInicio.x, dibujoModalActual.x);
+    const xmax = Math.max(dibujoModalInicio.x, dibujoModalActual.x);
+    const ymin = Math.min(dibujoModalInicio.y, dibujoModalActual.y);
+    const ymax = Math.max(dibujoModalInicio.y, dibujoModalActual.y);
+    const esTap = xmax - xmin < 15 && ymax - ymin < 15;
+
+    const zona: ZonaPrivacidad = esTap
+      ? {
+          id: `manual-${Date.now()}`,
+          tipo: 'manual',
+          xmin: Math.max(0, dibujoModalActual.x - 70),
+          ymin: Math.max(0, dibujoModalActual.y - 50),
+          xmax: Math.min(1000, dibujoModalActual.x + 70),
+          ymax: Math.min(1000, dibujoModalActual.y + 50),
+          origen: 'manual',
+        }
+      : {
+          id: `manual-${Date.now()}`,
+          tipo: 'manual',
+          xmin,
+          ymin,
+          xmax,
+          ymax,
+          origen: 'manual',
+        };
+
+    setDibujoModalInicio(null);
+    setDibujoModalActual(null);
+    setPixelandoModal(true);
+    try {
+      const res = await aplicarPixelacionEnZonas(reporteModal.foto, [zona], 16);
+      onActualizarFotoReporte(reporteModal.id, res.dataUrl);
+      setEstadoPixelModal('Zona pixelada y guardada en la ficha.');
+    } finally {
+      setPixelandoModal(false);
+    }
+  };
 
   return (
     <section className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6">
@@ -268,14 +386,87 @@ export const TablaRegistros: React.FC<TablaRegistrosProps> = ({
             </div>
 
             <div className="space-y-4 p-5">
-              <FotoAnonimizada
-                foto={reporteModal.foto}
-                reporteId={reporteModal.id}
-                categoria={reporteModal.categoria}
-                actor={reporteModal.actor}
-                cuadra={reporteModal.cuadra}
-                className="h-56 w-full border border-slate-200 dark:border-slate-700"
-              />
+              {reporteModal.foto && reporteModal.foto.startsWith('data:image/') && onActualizarFotoReporte ? (
+                <div className="space-y-2">
+                  <div
+                    ref={modalFotoRef}
+                    onPointerDown={(e) => {
+                      if (pixelandoModal) return;
+                      const pt = obtenerCoordModal(e.clientX, e.clientY);
+                      if (!pt) return;
+                      e.currentTarget.setPointerCapture(e.pointerId);
+                      setDibujoModalInicio(pt);
+                      setDibujoModalActual(pt);
+                    }}
+                    onPointerMove={(e) => {
+                      if (!dibujoModalInicio) return;
+                      const pt = obtenerCoordModal(e.clientX, e.clientY);
+                      if (pt) setDibujoModalActual(pt);
+                    }}
+                    onPointerUp={manejarPointerUpModal}
+                    className="relative mx-auto w-full max-w-md select-none overflow-hidden border border-slate-200 touch-none cursor-crosshair dark:border-slate-700"
+                  >
+                    <FotoAnonimizada
+                      foto={reporteModal.foto}
+                      reporteId={reporteModal.id}
+                      categoria={reporteModal.categoria}
+                      actor={reporteModal.actor}
+                      cuadra={reporteModal.cuadra}
+                      sinRecorte={true}
+                      className="w-full"
+                    />
+                    {dibujoModalInicio && dibujoModalActual && (
+                      <div
+                        className="pointer-events-none absolute border-2 border-[#0B3B69] bg-[#0B3B69]/25"
+                        style={{
+                          left: `${Math.min(dibujoModalInicio.x, dibujoModalActual.x) / 10}%`,
+                          top: `${Math.min(dibujoModalInicio.y, dibujoModalActual.y) / 10}%`,
+                          width: `${Math.abs(dibujoModalActual.x - dibujoModalInicio.x) / 10}%`,
+                          height: `${Math.abs(dibujoModalActual.y - dibujoModalInicio.y) / 10}%`,
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950">
+                    <span className="text-[11px] text-slate-600 dark:text-slate-300">
+                      Toca o arrastra sobre la foto para pixelar una zona
+                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={pixelandoModal}
+                        onClick={manejarPixelarIAModal}
+                        className="inline-flex items-center gap-1 bg-[#0B3B69] px-2.5 py-1 text-[11px] font-medium text-white hover:bg-[#082c4f] disabled:opacity-60 dark:bg-sky-700 cursor-pointer"
+                      >
+                        <Sparkles className="h-3 w-3" />
+                        Pixelar IA
+                      </button>
+                      <button
+                        type="button"
+                        disabled={pixelandoModal}
+                        onClick={manejarPixelarCompletoModal}
+                        className="inline-flex items-center gap-1 border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-800 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 cursor-pointer"
+                      >
+                        <Grid2x2 className="h-3 w-3" />
+                        Pixelar toda
+                      </button>
+                    </div>
+                  </div>
+                  {estadoPixelModal && (
+                    <p className="text-[11px] text-[#0B3B69] dark:text-sky-400">{estadoPixelModal}</p>
+                  )}
+                </div>
+              ) : (
+                <FotoAnonimizada
+                  foto={reporteModal.foto}
+                  reporteId={reporteModal.id}
+                  categoria={reporteModal.categoria}
+                  actor={reporteModal.actor}
+                  cuadra={reporteModal.cuadra}
+                  className="h-56 w-full border border-slate-200 dark:border-slate-700"
+                />
+              )}
 
               <div className="grid grid-cols-2 gap-3 border-b border-slate-100 pb-4 text-xs dark:border-slate-800">
                 <div>

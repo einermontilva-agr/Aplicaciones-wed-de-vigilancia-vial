@@ -4,6 +4,8 @@ import {
   Camera,
   CheckCircle2,
   Clock,
+  Eraser,
+  Grid2x2,
   Loader2,
   LocateFixed,
   MapPin,
@@ -11,6 +13,7 @@ import {
   RotateCcw,
   ShieldAlert,
   ShieldCheck,
+  Sparkles,
   Trash2,
   Undo2,
 } from 'lucide-react';
@@ -104,6 +107,7 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
   const [fotoDataUrl, setFotoDataUrl] = useState<string | undefined>(undefined);
   const [fotoMeta, setFotoMeta] = useState<{ width: number; height: number; sizeKB: number } | null>(null);
   const [zonasPrivacidad, setZonasPrivacidad] = useState<ZonaPrivacidad[]>([]);
+  const [tamanoPixel, setTamanoPixel] = useState<number>(14);
   const [avisoPrivacidad, setAvisoPrivacidad] = useState<string>('');
   const [errorPrivacidad, setErrorPrivacidad] = useState<string>('');
   const [validacionFoto, setValidacionFoto] = useState<ResultadoValidacionFoto | null>(null);
@@ -128,6 +132,15 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
   const [segundosTranscurridos, setSegundosTranscurridos] = useState<number>(0);
   const intervaloRef = useRef<number | null>(null);
   const inputFotoRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (intervaloRef.current) {
+        window.clearInterval(intervaloRef.current);
+        intervaloRef.current = null;
+      }
+    };
+  }, []);
 
   const iniciarCronometroSiNoCorre = () => {
     if (inicioPruebaMs !== null) return;
@@ -252,8 +265,12 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
     );
   };
 
-  const reconstruirConZonas = async (baseOriginal: string, zonas: ZonaPrivacidad[]) => {
-    const pixelada = await aplicarPixelacionEnZonas(baseOriginal, zonas, 11);
+  const reconstruirConZonas = async (
+    baseOriginal: string,
+    zonas: ZonaPrivacidad[],
+    bloque = tamanoPixel
+  ) => {
+    const pixelada = await aplicarPixelacionEnZonas(baseOriginal, zonas, bloque);
     setFotoDataUrl(pixelada.dataUrl);
     setFotoMeta({
       width: pixelada.width,
@@ -264,23 +281,26 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
 
   const ejecutarValidacionYPrivacidad = async (
     baseOriginal: string,
-    categoriaActual: CategoriaObstruccion,
-    soloRevalidarCategoria = false
+    categoriaActual: CategoriaObstruccion
   ) => {
     setValidandoFoto(true);
     setErrorValidacionServicio('');
     setValidacionFoto(null);
 
-    const { resultado, error: errVal } = await validarEvidenciaFoto(
+    const { resultado, error: errVal, servicioNoDisponible } = await validarEvidenciaFoto(
       baseOriginal,
       categoriaActual
     );
     setValidandoFoto(false);
 
     if (errVal || !resultado) {
-      setErrorValidacionServicio(
-        errVal ?? 'No se pudo completar la validación inteligente de la fotografía.'
-      );
+      if (servicioNoDisponible) {
+        setErrorValidacionServicio(
+          'El servicio de verificación automática de IA está saturado temporalmente; puedes publicar el reporte con tu fotografía o pixelar rostros y placas manualmente abajo.'
+        );
+        return;
+      }
+      setErrorValidacionServicio(errVal || 'No se pudo validar el formato de la imagen.');
       return;
     }
 
@@ -288,10 +308,6 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
 
     if (!resultado.valida) {
       setAvisoPrivacidad('');
-      return;
-    }
-
-    if (soloRevalidarCategoria && zonasPrivacidad.length > 0) {
       return;
     }
 
@@ -303,37 +319,38 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
     setErrorPrivacidad('');
     setAvisoPrivacidad('Detectando rostros y placas automáticamente...');
 
+    const zonasManuales = zonasPrivacidad.filter((z) => z.origen === 'manual');
     const { zonas, error } = await detectarZonasPrivacidad(baseOriginal);
-    setZonasPrivacidad(zonas);
 
     if (error) {
-      setErrorPrivacidad(error);
-      setAvisoPrivacidad('Sin detección automática: dibuja un recuadro sobre rostros o placas si lo necesitas.');
-      await reconstruirConZonas(baseOriginal, []);
+      setZonasPrivacidad(zonasManuales);
+      setErrorPrivacidad(
+        `${error} Puedes usar "Pixelar toda la foto" o tocar/arrastrar sobre rostros y placas.`
+      );
+      setAvisoPrivacidad(
+        'Detección automática no disponible en este momento: usa pixelado manual o completo debajo.'
+      );
+      await reconstruirConZonas(baseOriginal, zonasManuales);
       setProcesandoFoto(false);
       return;
     }
 
+    const combinadas = [...zonas, ...zonasManuales];
+    setZonasPrivacidad(combinadas);
+
     const rostros = zonas.filter((z) => z.tipo === 'rostro').length;
     const placas = zonas.filter((z) => z.tipo === 'placa').length;
-    if (zonas.length === 0) {
-      setAvisoPrivacidad('No se detectaron rostros ni placas visibles; la foto se mantiene nítida.');
+    if (combinadas.length === 0) {
+      setAvisoPrivacidad('No se detectaron rostros ni placas visibles; puedes pixelar manualmente debajo si deseas.');
     } else {
       setAvisoPrivacidad(
-        `Pixelación selectiva aplicada: ${rostros} rostro(s) y ${placas} placa(s) protegidos.`
+        `Pixelación aplicada: ${rostros} rostro(s), ${placas} placa(s) y ${zonasManuales.length} zona(s) manual(es).`
       );
     }
 
-    await reconstruirConZonas(baseOriginal, zonas);
+    await reconstruirConZonas(baseOriginal, combinadas);
     setProcesandoFoto(false);
   };
-
-  // Si hay una foto cargada y el usuario cambia la categoría, revalidamos correspondencia con IA
-  useEffect(() => {
-    if (!fotoBaseOriginal) return;
-    ejecutarValidacionYPrivacidad(fotoBaseOriginal, categoria, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoria]);
 
   const procesarFoto = async (file: File) => {
     setProcesandoFoto(true);
@@ -347,7 +364,7 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
       setFotoDataUrl(res.dataUrl);
       setFotoMeta({ width: res.width, height: res.height, sizeKB: res.sizeKB });
       setProcesandoFoto(false);
-      await ejecutarValidacionYPrivacidad(res.dataUrl, categoria, false);
+      await ejecutarValidacionYPrivacidad(res.dataUrl, categoria);
     } catch (err) {
       setErrorForm(err instanceof Error ? err.message : 'Error al procesar la fotografía.');
       setProcesandoFoto(false);
@@ -357,6 +374,7 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
   const manejarCambioArchivo = async (e: React.ChangeEvent<HTMLInputElement>) => {
     iniciarCronometroSiNoCorre();
     const archivo = e.target.files?.[0];
+    e.target.value = '';
     if (!archivo) return;
     await procesarFoto(archivo);
   };
@@ -413,22 +431,65 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
     setDibujoInicio(null);
     setDibujoActual(null);
 
-    if (xmax - xmin < 15 || ymax - ymin < 15) return;
+    const esTap = xmax - xmin < 15 && ymax - ymin < 15;
+    const nuevaZona: ZonaPrivacidad = esTap
+      ? {
+          id: `manual-${Date.now()}`,
+          tipo: 'manual',
+          xmin: Math.max(0, dibujoActual.x - 65),
+          ymin: Math.max(0, dibujoActual.y - 45),
+          xmax: Math.min(1000, dibujoActual.x + 65),
+          ymax: Math.min(1000, dibujoActual.y + 45),
+          origen: 'manual',
+        }
+      : {
+          id: `manual-${Date.now()}`,
+          tipo: 'manual',
+          xmin,
+          ymin,
+          xmax,
+          ymax,
+          origen: 'manual',
+        };
 
-    const nuevaZona: ZonaPrivacidad = {
-      id: `manual-${Date.now()}`,
-      tipo: 'manual',
-      xmin,
-      ymin,
-      xmax,
-      ymax,
-      origen: 'manual',
-    };
+    if (!esTap && (xmax - xmin < 15 || ymax - ymin < 15)) return;
 
     const actualizadas = [...zonasPrivacidad, nuevaZona];
     setZonasPrivacidad(actualizadas);
     await reconstruirConZonas(fotoBaseOriginal, actualizadas);
-    setAvisoPrivacidad(`Zona manual agregada (${actualizadas.length} área(s) pixelada(s)).`);
+    setAvisoPrivacidad(`Zona pixelada agregada (${actualizadas.length} área(s) protegida(s)).`);
+  };
+
+  const manejarPixelarTodaLaFoto = async () => {
+    if (!fotoBaseOriginal) return;
+    const zonaCompleta: ZonaPrivacidad = {
+      id: `full-${Date.now()}`,
+      tipo: 'manual',
+      xmin: 0,
+      ymin: 0,
+      xmax: 1000,
+      ymax: 1000,
+      origen: 'manual',
+    };
+    const actualizadas = [zonaCompleta];
+    setZonasPrivacidad(actualizadas);
+    await reconstruirConZonas(fotoBaseOriginal, actualizadas);
+    setErrorPrivacidad('');
+    setAvisoPrivacidad('Pixelación completa aplicada sobre toda la fotografía.');
+  };
+
+  const manejarLimpiarZonasPixelado = async () => {
+    if (!fotoBaseOriginal) return;
+    setZonasPrivacidad([]);
+    await reconstruirConZonas(fotoBaseOriginal, []);
+    setAvisoPrivacidad('Se quitó el pixelado; la fotografía volvió a su estado original.');
+  };
+
+  const manejarCambiarTamanoPixel = async (nuevoTamano: number) => {
+    setTamanoPixel(nuevoTamano);
+    if (fotoBaseOriginal && zonasPrivacidad.length > 0) {
+      await reconstruirConZonas(fotoBaseOriginal, zonasPrivacidad, nuevoTamano);
+    }
   };
 
   const manejarDeshacerUltimaZona = async () => {
@@ -462,9 +523,7 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
     Boolean(fotoDataUrl) &&
     (validandoFoto ||
       procesandoFoto ||
-      Boolean(errorValidacionServicio) ||
-      !validacionFoto ||
-      !validacionFoto.valida);
+      (validacionFoto !== null && !validacionFoto.valida));
 
   const manejarEnviar = (e: React.FormEvent) => {
     e.preventDefault();
@@ -477,17 +536,13 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
 
     if (fotoDataUrl) {
       if (validandoFoto || procesandoFoto) {
-        setErrorForm('Espera a que finalice la validación inteligente de la fotografía.');
+        setErrorForm('Espera un momento mientras termina el procesamiento de la fotografía.');
         return;
       }
-      if (errorValidacionServicio) {
-        setErrorForm(errorValidacionServicio);
-        return;
-      }
-      if (!validacionFoto || !validacionFoto.valida) {
+      if (validacionFoto !== null && !validacionFoto.valida) {
         setErrorForm(
-          validacionFoto?.motivoRechazo ||
-            'La fotografía fue rechazada por los criterios mínimos de calidad. Toma una nueva foto o quítala para continuar.'
+          validacionFoto.motivoRechazo ||
+            'No se detectaron vehículos en la fotografía. Toma una nueva foto que incluya al menos un vehículo o quítala para continuar.'
         );
         return;
       }
@@ -863,10 +918,10 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                    4. Foto opcional (validación IA y pixelación automática de rostros y placas)
+                    4. Foto opcional (verificación IA y pixelación automática de rostros y placas)
                   </p>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Verificamos nitidez, luz, autenticidad y categoría antes de proteger rostros y placas.
+                    No importa si la foto sale un poco borrosa; solo se bloquea la publicación si no aparece ningún vehículo. Rostros y placas se pixelan automáticamente.
                   </p>
                 </div>
 
@@ -921,34 +976,42 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
                     )}
                   </div>
 
-                  {/* Resultado de validación inteligente con IA */}
-                  {validandoFoto && (
-                    <div className="flex items-center gap-2 border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
-                      <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                      <span>Analizando calidad, iluminación, autenticidad y categoría con IA...</span>
-                    </div>
-                  )}
+                      {/* Resultado de validación inteligente con IA */}
+                      {validandoFoto && (
+                        <div className="flex items-center gap-2 border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
+                          <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                          <span>Verificando que la fotografía incluya al menos un vehículo...</span>
+                        </div>
+                      )}
 
-                  {!validandoFoto && errorValidacionServicio && (
-                    <div className="flex items-start gap-2 border border-red-300 bg-red-50 px-3 py-2.5 text-xs text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
-                      <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-[#DC2626] dark:text-red-400" />
-                      <div>
-                        <p className="font-semibold">No se pudo validar la fotografía</p>
-                        <p className="mt-0.5">{errorValidacionServicio}</p>
-                      </div>
-                    </div>
-                  )}
+                      {!validandoFoto && errorValidacionServicio && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#D97706] dark:text-amber-400" />
+                            <span>{errorValidacionServicio}</span>
+                          </div>
+                          {fotoBaseOriginal && (
+                            <button
+                              type="button"
+                              onClick={() => ejecutarValidacionYPrivacidad(fotoBaseOriginal, categoria)}
+                              className="border border-amber-400 bg-white px-2.5 py-1 text-[11px] font-semibold text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:bg-slate-900 dark:text-amber-200 cursor-pointer"
+                            >
+                              Reintentar
+                            </button>
+                          )}
+                        </div>
+                      )}
 
                   {!validandoFoto && validacionFoto && !validacionFoto.valida && (
                     <div className="flex items-start gap-2 border border-red-300 bg-red-50 px-3 py-2.5 text-xs text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
                       <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-[#DC2626] dark:text-red-400" />
                       <div>
                         <p className="font-semibold">
-                          Fotografía rechazada · Envío bloqueado
+                          Fotografía rechazada · Envío bloqueado (sin vehículos)
                         </p>
                         <p className="mt-0.5">{validacionFoto.motivoRechazo}</p>
                         <p className="mt-1 text-[11px] opacity-85">
-                          Toma una nueva fotografía clara del incidente o quita la imagen para continuar.
+                          Sube una fotografía donde se observe al menos un vehículo (aunque salga un poco borrosa) o quita la imagen para continuar.
                         </p>
                       </div>
                     </div>
@@ -968,6 +1031,82 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
                     </div>
                   )}
 
+                  {/* Herramientas visibles de pixelado manual y automático */}
+                  {fotoBaseOriginal && (
+                    <div className="space-y-2.5 border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                          Herramientas de pixelado ({zonasPrivacidad.length} zona(s) aplicada(s))
+                        </span>
+                        <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                          <label htmlFor="rango-pixel" className="whitespace-nowrap">
+                            Tamaño de píxel:
+                          </label>
+                          <input
+                            id="rango-pixel"
+                            type="range"
+                            min={8}
+                            max={28}
+                            step={2}
+                            value={tamanoPixel}
+                            onChange={(e) => manejarCambiarTamanoPixel(Number(e.target.value))}
+                            className="w-24 accent-[#0B3B69] dark:accent-sky-500 cursor-pointer"
+                          />
+                          <span className="font-mono font-semibold tabular-nums">{tamanoPixel} px</span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={procesandoFoto || validandoFoto}
+                          onClick={() => ejecutarDeteccionAutomatica(fotoBaseOriginal)}
+                          className="inline-flex min-h-[34px] items-center gap-1.5 bg-[#0B3B69] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#082c4f] disabled:opacity-60 dark:bg-sky-700 dark:hover:bg-sky-600 cursor-pointer"
+                        >
+                          <Sparkles className="h-3.5 w-3.5" />
+                          Pixelar rostros/placas (IA)
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={procesandoFoto || validandoFoto}
+                          onClick={manejarPixelarTodaLaFoto}
+                          className="inline-flex min-h-[34px] items-center gap-1.5 border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-800 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+                        >
+                          <Grid2x2 className="h-3.5 w-3.5 text-[#0B3B69] dark:text-sky-400" />
+                          Pixelar toda la foto
+                        </button>
+
+                        {zonasPrivacidad.length > 0 && (
+                          <>
+                            <button
+                              type="button"
+                              disabled={procesandoFoto || validandoFoto}
+                              onClick={manejarDeshacerUltimaZona}
+                              className="inline-flex min-h-[34px] items-center gap-1 border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 cursor-pointer"
+                            >
+                              <Undo2 className="h-3.5 w-3.5" />
+                              Deshacer
+                            </button>
+                            <button
+                              type="button"
+                              disabled={procesandoFoto || validandoFoto}
+                              onClick={manejarLimpiarZonasPixelado}
+                              className="inline-flex min-h-[34px] items-center gap-1 border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 cursor-pointer"
+                            >
+                              <Eraser className="h-3.5 w-3.5" />
+                              Quitar pixelado
+                            </button>
+                          </>
+                        )}
+                      </div>
+
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        También puedes <strong>tocar o arrastrar</strong> directamente sobre la fotografía para pixelar cualquier placa, rostro o detalle al instante.
+                      </p>
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                     <div className="space-y-0.5">
                       {errorPrivacidad && (
@@ -976,8 +1115,7 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
                         </p>
                       )}
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        {fotoMeta ? `${fotoMeta.width}×${fotoMeta.height} px · ${fotoMeta.sizeKB} KB · ` : ''}
-                        Arrastra sobre la foto si deseas pixelar manualmente una zona adicional.
+                        {fotoMeta ? `${fotoMeta.width}×${fotoMeta.height} px · ${fotoMeta.sizeKB} KB` : ''}
                       </p>
                     </div>
 
@@ -986,22 +1124,11 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
                         <button
                           type="button"
                           disabled={procesandoFoto || validandoFoto}
-                          onClick={() => ejecutarValidacionYPrivacidad(fotoBaseOriginal, categoria, false)}
+                          onClick={() => ejecutarValidacionYPrivacidad(fotoBaseOriginal, categoria)}
                           className="inline-flex items-center gap-1 border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 cursor-pointer"
                         >
                           <RotateCcw className="h-3.5 w-3.5" />
-                          Revalidar
-                        </button>
-                      )}
-                      {zonasPrivacidad.length > 0 && (
-                        <button
-                          type="button"
-                          disabled={procesandoFoto || validandoFoto}
-                          onClick={manejarDeshacerUltimaZona}
-                          className="inline-flex items-center gap-1 border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 cursor-pointer"
-                        >
-                          <Undo2 className="h-3.5 w-3.5" />
-                          Deshacer ({zonasPrivacidad.length})
+                          Revalidar vehículo
                         </button>
                       )}
                       <button
@@ -1028,9 +1155,11 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
             disabled={fotoBloqueadaPorIA}
             className="min-h-[52px] w-full bg-[#0B3B69] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#082c4f] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-sky-700 dark:hover:bg-sky-600 cursor-pointer"
           >
-            {fotoBloqueadaPorIA
-              ? 'Esperando fotografía válida para guardar'
-              : `Guardar reporte en mapa (${desglose.nivel} · ${desglose.puntaje} pts)`}
+            {validandoFoto || procesandoFoto
+              ? 'Analizando fotografía...'
+              : fotoBloqueadaPorIA
+                ? 'Fotografía rechazada: no se detectaron vehículos'
+                : `Guardar reporte en mapa (${desglose.nivel} · ${desglose.puntaje} pts)`}
           </button>
         </div>
       </form>

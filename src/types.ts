@@ -77,6 +77,7 @@ export interface OverrideReporte {
   ultima_confirmacion?: string;
   estado?: EstadoReporte;
   solucionado_en?: string;
+  foto?: string;
 }
 
 export interface ZonaProximidad {

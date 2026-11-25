@@ -917,7 +917,7 @@ export const TableroOperativo: React.FC<TableroOperativoProps> = ({
             Hora pico configurada: {criterios.horas_pico.join(' · ')}
             {reportesFiltrados.length > 0 && (
               <span>
-                {' · '}Último filtro hora:{' '}
+                {' · '}Último registro visible:{' '}
                 {extraerHora(reportesFiltrados[reportesFiltrados.length - 1].fecha_hora)}
               </span>
             )}

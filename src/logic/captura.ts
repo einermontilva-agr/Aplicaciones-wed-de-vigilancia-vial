@@ -105,107 +105,13 @@ export function procesarYAnonimizarFoto(
 }
 
 /**
- * Verificación previa rápida de luminancia y contraste para detectar imágenes completamente
- * negras, completamente blancas o sin información visual antes/junto con el análisis de IA.
- */
-export function analizarCalidadBasicaImagen(dataUrl: string): Promise<{
-  esSolidaONula: boolean;
-  motivo?: string;
-}> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onerror = () =>
-      resolve({
-        esSolidaONula: true,
-        motivo: 'No se pudo leer la imagen. Por favor, toma una nueva fotografía.',
-      });
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const w = 64;
-      const h = 64;
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        resolve({ esSolidaONula: false });
-        return;
-      }
-      ctx.drawImage(img, 0, 0, w, h);
-      const data = ctx.getImageData(0, 0, w, h).data;
-      let sumaLum = 0;
-      let sumaSq = 0;
-      const n = w * h;
-
-      for (let i = 0; i < data.length; i += 4) {
-        const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
-        sumaLum += lum;
-        sumaSq += lum * lum;
-      }
-
-      const promedio = sumaLum / n;
-      const varianza = Math.max(0, sumaSq / n - promedio * promedio);
-      const desviacion = Math.sqrt(varianza);
-
-      if (promedio < 12 && desviacion < 10) {
-        resolve({
-          esSolidaONula: true,
-          motivo:
-            'La fotografía está completamente negra o sin iluminación suficiente. Toma una nueva foto con mejor luz.',
-        });
-        return;
-      }
-
-      if (promedio > 245 && desviacion < 10) {
-        resolve({
-          esSolidaONula: true,
-          motivo:
-            'La fotografía está completamente blanca o sobreexpuesta. Toma una nueva foto enfocando claramente el incidente.',
-        });
-        return;
-      }
-
-      if (desviacion < 6) {
-        resolve({
-          esSolidaONula: true,
-          motivo:
-            'La imagen no contiene detalles visibles o es de un color uniforme de muy baja calidad. Toma una nueva fotografía.',
-        });
-        return;
-      }
-
-      resolve({ esSolidaONula: false });
-    };
-    img.src = dataUrl;
-  });
-}
-
-/**
- * Envía la fotografía al servidor para validación inteligente mediante IA (calidad,
- * iluminación, autenticidad, presencia real de incidente y correspondencia de categoría).
+ * Envía la fotografía al servidor para validación inteligente mediante IA:
+ * tolera fotografías borrosas y bloquea únicamente si no incluye ningún vehículo.
  */
 export async function validarEvidenciaFoto(
   dataUrl: string,
   categoria: CategoriaObstruccion
-): Promise<{ resultado: ResultadoValidacionFoto | null; error?: string }> {
-  const previa = await analizarCalidadBasicaImagen(dataUrl);
-  if (previa.esSolidaONula) {
-    return {
-      resultado: {
-        valida: false,
-        muyBorrosa: false,
-        iluminacionInsuficiente: true,
-        imagenBlancaONegra: true,
-        observaIncidente: false,
-        correspondeCategoria: false,
-        posibleFalsaOCaptura: false,
-        motivoRechazo:
-          previa.motivo ??
-          'La imagen no cumple con la calidad mínima. Toma una nueva fotografía.',
-        resumen: '',
-      },
-    };
-  }
-
+): Promise<{ resultado: ResultadoValidacionFoto | null; error?: string; servicioNoDisponible?: boolean }> {
   const match = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(dataUrl);
   if (!match) {
     return {
@@ -217,16 +123,20 @@ export async function validarEvidenciaFoto(
   const [, mimeType, imagenBase64] = match;
 
   try {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 12000);
     const resp = await fetch('/api/validar-evidencia', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ imagenBase64, mimeType, categoria }),
-    });
+      signal: controller.signal,
+    }).finally(() => window.clearTimeout(timer));
 
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
       return {
         resultado: null,
+        servicioNoDisponible: Boolean(data?.servicioNoDisponible) || resp.status >= 500,
         error:
           typeof data?.error === 'string'
             ? data.error
@@ -238,7 +148,8 @@ export async function validarEvidenciaFoto(
   } catch {
     return {
       resultado: null,
-      error: 'Sin conexión con el servicio de validación inteligente de fotografías.',
+      servicioNoDisponible: true,
+      error: 'El servicio de verificación tardó demasiado o no respondió; puedes continuar subiendo tu foto.',
     };
   }
 }
@@ -261,11 +172,14 @@ export async function detectarZonasPrivacidad(
   const [, mimeType, imagenBase64] = match;
 
   try {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 12000);
     const resp = await fetch('/api/detectar-privacidad', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ imagenBase64, mimeType }),
-    });
+      signal: controller.signal,
+    }).finally(() => window.clearTimeout(timer));
 
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
@@ -283,7 +197,7 @@ export async function detectarZonasPrivacidad(
   } catch {
     return {
       zonas: [],
-      error: 'Sin conexión con el servicio de detección automática. Puedes marcar zonas manualmente.',
+      error: 'La detección automática tardó demasiado o no respondió. Puedes marcar zonas manualmente.',
     };
   }
 }
@@ -334,7 +248,7 @@ export function aplicarPixelacionEnZonas(
         const pw = Math.max(4, Math.ceil(((xmax - xmin) / 1000) * width));
         const ph = Math.max(4, Math.ceil(((ymax - ymin) / 1000) * height));
 
-        const paso = Math.max(6, Math.min(20, tamanoBloque));
+        const paso = Math.max(6, Math.min(32, tamanoBloque));
         const cols = Math.max(3, Math.round(pw / paso));
         const rows = Math.max(2, Math.round(ph / paso));
 

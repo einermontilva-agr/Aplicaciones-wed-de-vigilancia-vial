@@ -299,7 +299,9 @@ export const MapaSantaMarta: React.FC<MapaSantaMartaProps> = ({
       },
     };
 
+    let efectoActivo = true;
     const aplicarCapaCalor = () => {
+      if (!efectoActivo || !mapaRef.current) return;
       const size = mapa.getSize();
       if (size.x <= 0 || size.y <= 0) {
         mapa.invalidateSize({ animate: false });
@@ -319,6 +321,10 @@ export const MapaSantaMarta: React.FC<MapaSantaMartaProps> = ({
     mapa.whenReady(() => {
       aplicarCapaCalor();
     });
+
+    return () => {
+      efectoActivo = false;
+    };
   }, [reportes, verCalor]);
 
   // Capa de zonas acumulativas por proximidad (15-30 m)

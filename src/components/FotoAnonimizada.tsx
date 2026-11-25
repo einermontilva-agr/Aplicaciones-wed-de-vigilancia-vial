@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   CategoriaObstruccion,
   ETIQUETAS_ACTOR,
@@ -14,6 +14,7 @@ interface FotoAnonimizadaProps {
   cuadra: string;
   className?: string;
   compact?: boolean;
+  sinRecorte?: boolean;
 }
 
 /**
@@ -29,8 +30,13 @@ export const FotoAnonimizada: React.FC<FotoAnonimizadaProps> = ({
   cuadra,
   className = '',
   compact = false,
+  sinRecorte = false,
 }) => {
   const [errorCarga, setErrorCarga] = useState(false);
+
+  useEffect(() => {
+    setErrorCarga(false);
+  }, [foto]);
 
   const esDataUrl = Boolean(foto && foto.startsWith('data:image/'));
 
@@ -41,11 +47,12 @@ export const FotoAnonimizada: React.FC<FotoAnonimizadaProps> = ({
           src={foto}
           alt={`Evidencia fotográfica ${reporteId} en ${cuadra}`}
           referrerPolicy="no-referrer"
+          draggable={false}
           onError={() => setErrorCarga(true)}
-          className="h-full w-full object-cover"
+          className={sinRecorte ? 'block h-auto w-full' : 'h-full w-full object-cover'}
         />
         {!compact && (
-          <div className="absolute bottom-2 left-2 bg-slate-950/80 px-2 py-1 font-mono text-[11px] font-medium text-white">
+          <div className="pointer-events-none absolute bottom-2 left-2 bg-slate-950/80 px-2 py-1 font-mono text-[11px] font-medium text-white">
             {reporteId} · {cuadra}
           </div>
         )}

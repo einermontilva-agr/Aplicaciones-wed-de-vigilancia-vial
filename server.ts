@@ -18,15 +18,6 @@ const ALLOWED_CATEGORIAS = new Set([
 ]);
 const MAX_BASE64_LENGTH = 5_000_000;
 
-const DESCRIPCION_CATEGORIA_IA: Record<string, string> = {
-  doble_fila:
-    'Estacionamiento en vía prohibida o doble fila (automóvil, moto, camioneta o camión detenido en la calzada o borde prohibido reduciendo el carril vehicular).',
-  bloqueo_rampa_cebra_paradero:
-    'Bloqueo de rampa peatonal, paso de cebra o paradero de transporte público (vehículo o elemento obstruyendo el cruce peatonal o acceso).',
-  invasion_anden:
-    'Invasión de andén o acera peatonal por mobiliario comercial, puestos de venta, mercancía, cajas o motocicletas estacionadas sobre el andén.',
-};
-
 interface ZonaDetectadaRaw {
   tipo?: unknown;
   ymin?: unknown;
@@ -100,6 +91,38 @@ function crearClienteGenAI(): GoogleGenAI | null {
   });
 }
 
+async function generarConRespaldo<T>(
+  fn: (modelo: string) => Promise<T>
+): Promise<T> {
+  const modelos = ['gemini-4-hydrogen', 'gemini-3.1-flash-lite'];
+  let ultimoError: unknown;
+
+  for (const modelo of modelos) {
+    for (let intento = 0; intento < 2; intento += 1) {
+      try {
+        return await fn(modelo);
+      } catch (err) {
+        ultimoError = err;
+        const msg = err instanceof Error ? err.message : String(err);
+        const esCuotaDiaria = msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED');
+        const esTemporal503 = msg.includes('503') || msg.includes('UNAVAILABLE');
+
+        if (esCuotaDiaria) {
+          break; // Pasar al modelo de respaldo sin esperar
+        }
+        if (esTemporal503 && intento === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 450));
+          continue;
+        }
+        if (!esTemporal503) {
+          throw err;
+        }
+      }
+    }
+  }
+  throw ultimoError;
+}
+
 async function startServer() {
   const app = express();
   app.use(express.json({ limit: '6mb' }));
@@ -134,59 +157,63 @@ async function startServer() {
     }
 
     try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: {
-          parts: [
-            {
-              inlineData: {
-                mimeType,
-                data: imagenBase64,
-              },
-            },
-            {
-              text:
-                'Analiza esta fotografía de evidencia vial urbana. Detecta todas las cajas delimitadoras [ymin, xmin, ymax, xmax] en escala normalizada de 0 a 1000 para: ' +
-                '(1) cada rostro humano visible ("rostro"), incluidos peatones, conductores, vendedores o motociclistas con rostro visible; y ' +
-                '(2) cada placa de matrícula de automóvil, taxi, camioneta, bus o motocicleta ("placa"), incluso si está inclinada o parcial. ' +
-                'No incluyas avisos comerciales ni señales de tránsito como placas. Si no hay rostros ni placas visibles, devuelve [].',
-            },
-          ],
-        },
-        config: {
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                tipo: {
-                  type: Type.STRING,
-                  description: 'Tipo de elemento sensible: exactamente "rostro" o "placa".',
-                },
-                ymin: {
-                  type: Type.INTEGER,
-                  description: 'Coordenada vertical superior de 0 a 1000.',
-                },
-                xmin: {
-                  type: Type.INTEGER,
-                  description: 'Coordenada horizontal izquierda de 0 a 1000.',
-                },
-                ymax: {
-                  type: Type.INTEGER,
-                  description: 'Coordenada vertical inferior de 0 a 1000.',
-                },
-                xmax: {
-                  type: Type.INTEGER,
-                  description: 'Coordenada horizontal derecha de 0 a 1000.',
+      const response = await generarConRespaldo((modelo) =>
+        ai.models.generateContent({
+          model: modelo,
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType,
+                  data: imagenBase64,
                 },
               },
-              required: ['tipo', 'ymin', 'xmin', 'ymax', 'xmax'],
+              {
+                text:
+                  'Analiza esta fotografía de evidencia vial urbana. Detecta todas las cajas delimitadoras [ymin, xmin, ymax, xmax] en escala normalizada de 0 a 1000 para: ' +
+                  '(1) cada rostro humano visible ("rostro"), incluidos peatones, conductores, vendedores o motociclistas con rostro visible; y ' +
+                  '(2) cada placa de matrícula de automóvil, taxi, camioneta, bus o motocicleta ("placa"), incluso si está inclinada o parcial. ' +
+                  'No incluyas avisos comerciales ni señales de tránsito como placas. Si no hay rostros ni placas visibles, devuelve [].',
+              },
+            ],
+          },
+          config: {
+            ...(modelo === 'gemini-4-hydrogen'
+              ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } }
+              : {}),
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  tipo: {
+                    type: Type.STRING,
+                    description: 'Tipo de elemento sensible: exactamente "rostro" o "placa".',
+                  },
+                  ymin: {
+                    type: Type.INTEGER,
+                    description: 'Coordenada vertical superior de 0 a 1000.',
+                  },
+                  xmin: {
+                    type: Type.INTEGER,
+                    description: 'Coordenada horizontal izquierda de 0 a 1000.',
+                  },
+                  ymax: {
+                    type: Type.INTEGER,
+                    description: 'Coordenada vertical inferior de 0 a 1000.',
+                  },
+                  xmax: {
+                    type: Type.INTEGER,
+                    description: 'Coordenada horizontal derecha de 0 a 1000.',
+                  },
+                },
+                required: ['tipo', 'ymin', 'xmin', 'ymax', 'xmax'],
+              },
             },
           },
-        },
-      });
+        })
+      );
 
       const texto = (response.text ?? '[]').trim();
       const parsed = JSON.parse(texto);
@@ -223,7 +250,7 @@ async function startServer() {
       return;
     }
 
-    if (typeof categoria !== 'string' || !ALLOWED_CATEGORIAS.has(categoria)) {
+    if (categoria !== undefined && (typeof categoria !== 'string' || !ALLOWED_CATEGORIAS.has(categoria))) {
       res.status(400).json({
         error: 'Categoría de reporte no válida para validación.',
       });
@@ -238,123 +265,90 @@ async function startServer() {
       return;
     }
 
-    const descCategoria = DESCRIPCION_CATEGORIA_IA[categoria] ?? categoria;
-
     try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: {
-          parts: [
-            {
-              inlineData: {
-                mimeType,
-                data: imagenBase64,
+      const response = await generarConRespaldo((modelo) =>
+        ai.models.generateContent({
+          model: modelo,
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType,
+                  data: imagenBase64,
+                },
               },
-            },
-            {
-              text:
-                `Eres un inspector estricto de calidad y autenticidad fotográfica para reportes ciudadanos de movilidad y espacio público.\n` +
-                `Categoría seleccionada por el usuario: "${categoria}" -> ${descCategoria}\n\n` +
-                `Evalúa la fotografía adjunta verificando OBLIGATORIAMENTE cada criterio:\n` +
-                `1. muyBorrosa: true si está demasiado borrosa, movida o desenfocada e impide distinguir el incidente.\n` +
-                `2. iluminacionInsuficiente: true si está muy oscura, subexpuesta o sobreexpuesta y no se distingue la escena.\n` +
-                `3. imagenBlancaONegra: true si la imagen es completamente negra, completamente blanca, de un solo color o de calidad extremadamente baja/pixelada/corrupta.\n` +
-                `4. observaIncidente: true SOLO si se observa claramente una vía pública, andén, vehículo, motocicleta, comercio o situación real de tránsito/espacio público con un incidente reportado. false si es un objeto cualquiera, interior de una casa, selfie, mascota, comida o foto sin relación.\n` +
-                `5. correspondeCategoria: true SOLO si lo observado en la foto coincide razonablemente con la categoría seleccionada ("${categoria}"). Si el usuario seleccionó invasión de andén pero la foto muestra solo un carro en doble fila o algo sin relación, marca false.\n` +
-                `6. posibleFalsaOCaptura: true si parece una captura de pantalla (UI de celular, barras de estado, botones, mapas), fotografía tomada a una pantalla/monitor, imagen descargada de internet con marcas de agua o textos promocionales, o imagen generada artificialmente / ilustrada que no representa una fotografía real de calle.\n\n` +
-                `Regla para "valida": debe ser true ÚNICAMENTE cuando muyBorrosa=false, iluminacionInsuficiente=false, imagenBlancaONegra=false, observaIncidente=true, correspondeCategoria=true y posibleFalsaOCaptura=false.\n` +
-                `Si valida=false, escribe en "motivoRechazo" un mensaje claro y directo en español explicando exactamente por qué fue rechazada y pidiendo al usuario tomar una nueva fotografía real del incidente.\n` +
-                `Si valida=true, deja "motivoRechazo" vacío y escribe en "resumen" una descripción breve en español (máx. 18 palabras) de lo que se observa.`,
-            },
-          ],
-        },
-        config: {
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              valida: { type: Type.BOOLEAN },
-              muyBorrosa: { type: Type.BOOLEAN },
-              iluminacionInsuficiente: { type: Type.BOOLEAN },
-              imagenBlancaONegra: { type: Type.BOOLEAN },
-              observaIncidente: { type: Type.BOOLEAN },
-              correspondeCategoria: { type: Type.BOOLEAN },
-              posibleFalsaOCaptura: { type: Type.BOOLEAN },
-              motivoRechazo: { type: Type.STRING },
-              resumen: { type: Type.STRING },
-            },
-            required: [
-              'valida',
-              'muyBorrosa',
-              'iluminacionInsuficiente',
-              'imagenBlancaONegra',
-              'observaIncidente',
-              'correspondeCategoria',
-              'posibleFalsaOCaptura',
-              'motivoRechazo',
-              'resumen',
+              {
+                text:
+                  `Analiza esta fotografía para verificar ÚNICAMENTE si incluye al menos un vehículo.\n\n` +
+                  `INSTRUCCIÓN CRÍTICA: NO rechaces ni penalices imágenes borrosas, desenfocadas, movidas, oscuras, pixeladas, con reflejos o de baja resolución. Aunque la fotografía salga borrosa o el vehículo aparezca parcialmente cortado, lejos o en una esquina, si se distingue al menos un vehículo o parte de él, DEBES aceptarla.\n\n` +
+                  `Evalúa un solo criterio:\n` +
+                  `- hayVehiculos: marca true si aparece o se distingue al menos un vehículo en cualquier lugar de la imagen (automóvil, taxi, camioneta, bus, camión, furgón, motocicleta, motocarro, bicicleta, o parte visible de su carrocería, llantas, faros o placa). Ante la mínima presencia vehicular, responde true. Marca false ÚNICAMENTE cuando sea totalmente seguro que NO hay ningún vehículo en toda la fotografía (por ejemplo: solo una mascota/animal, un retrato, comida, texto o un paisaje vacío sin vehículos).\n\n` +
+                  `Si hayVehiculos=false, escribe en "motivoRechazo" un mensaje breve en español indicando que no se observan vehículos en la fotografía y pidiendo subir una imagen que incluya al menos un vehículo.\n` +
+                  `Si hayVehiculos=true, deja "motivoRechazo" vacío ("") y escribe en "resumen" una descripción breve y genérica del vehículo observado en español (máx. 15 palabras), SIN transcribir números de placa ni identificar personas.`,
+              },
             ],
           },
-        },
-      });
+          config: {
+            ...(modelo === 'gemini-4-hydrogen'
+              ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } }
+              : {}),
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                hayVehiculos: { type: Type.BOOLEAN },
+                motivoRechazo: { type: Type.STRING },
+                resumen: { type: Type.STRING },
+              },
+              required: ['hayVehiculos', 'motivoRechazo', 'resumen'],
+            },
+          },
+        })
+      );
 
       const texto = (response.text ?? '{}').trim();
       const parsed = JSON.parse(texto) as Record<string, unknown>;
 
-      const muyBorrosa = Boolean(parsed.muyBorrosa);
-      const iluminacionInsuficiente = Boolean(parsed.iluminacionInsuficiente);
-      const imagenBlancaONegra = Boolean(parsed.imagenBlancaONegra);
-      const observaIncidente = Boolean(parsed.observaIncidente);
-      const correspondeCategoria = Boolean(parsed.correspondeCategoria);
-      const posibleFalsaOCaptura = Boolean(parsed.posibleFalsaOCaptura);
-
-      const valida =
-        Boolean(parsed.valida) &&
-        !muyBorrosa &&
-        !iluminacionInsuficiente &&
-        !imagenBlancaONegra &&
-        observaIncidente &&
-        correspondeCategoria &&
-        !posibleFalsaOCaptura;
+      const hayVehiculos = Boolean(parsed.hayVehiculos);
+      const valida = hayVehiculos;
 
       let motivoRechazo =
         typeof parsed.motivoRechazo === 'string' ? parsed.motivoRechazo.trim() : '';
 
       if (!valida && !motivoRechazo) {
-        const razones: string[] = [];
-        if (imagenBlancaONegra) razones.push('la imagen es completamente negra, blanca o de muy baja calidad');
-        if (muyBorrosa) razones.push('la fotografía está demasiado borrosa');
-        if (iluminacionInsuficiente) razones.push('no hay suficiente iluminación para distinguir la escena');
-        if (posibleFalsaOCaptura) razones.push('parece una captura de pantalla, imagen descargada o generada artificialmente');
-        if (!observaIncidente) razones.push('no se observa un incidente vial o de espacio público real');
-        if (observaIncidente && !correspondeCategoria) razones.push('la escena no corresponde con la categoría seleccionada');
-        motivoRechazo = `Fotografía rechazada porque ${razones.join(', ')}. Por favor, toma una nueva fotografía nítida y real del incidente.`;
+        motivoRechazo =
+          'No se observan vehículos incluidos en la imagen. Para publicar el reporte con fotografía, debe aparecer al menos un vehículo.';
       }
 
       const resumen =
         typeof parsed.resumen === 'string' && parsed.resumen.trim()
           ? parsed.resumen.trim()
           : valida
-            ? 'Evidencia válida acorde con la categoría seleccionada.'
+            ? 'Fotografía aceptada: presencia de vehículo verificada.'
             : '';
 
       res.json({
         valida,
-        muyBorrosa,
-        iluminacionInsuficiente,
-        imagenBlancaONegra,
-        observaIncidente,
-        correspondeCategoria,
-        posibleFalsaOCaptura,
+        muyBorrosa: false,
+        iluminacionInsuficiente: false,
+        imagenBlancaONegra: false,
+        observaIncidente: hayVehiculos,
+        correspondeCategoria: hayVehiculos,
+        posibleFalsaOCaptura: false,
         motivoRechazo: valida ? '' : motivoRechazo,
         resumen,
       });
     } catch (err) {
       const mensaje =
         err instanceof Error ? err.message : 'Error al validar la fotografía con IA.';
-      res.status(502).json({
-        error: `No se pudo completar la validación inteligente de la fotografía: ${mensaje}`,
+      const esTemporal =
+        mensaje.includes('503') ||
+        mensaje.includes('UNAVAILABLE') ||
+        mensaje.includes('429') ||
+        mensaje.includes('RESOURCE_EXHAUSTED');
+      res.status(esTemporal ? 503 : 502).json({
+        servicioNoDisponible: true,
+        error: 'El servicio de verificación IA está experimentando alta demanda temporal.',
       });
     }
   });

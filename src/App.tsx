@@ -124,6 +124,7 @@ export default function App() {
         ultima_confirmacion: ov.ultima_confirmacion ?? r.ultima_confirmacion,
         estado: ov.estado ?? r.estado ?? 'activo',
         solucionado_en: ov.solucionado_en ?? r.solucionado_en,
+        foto: ov.foto ?? r.foto,
       };
     });
     return recalcularReportes(conOverrides, vias, criteriosActivos);
@@ -171,6 +172,33 @@ export default function App() {
           ...previo,
           estado: nuevoEstado,
           solucionado_en: nuevoEstado === 'solucionado' ? ahoraLocal : undefined,
+        },
+      };
+      guardarOverridesReportes(siguiente);
+      return siguiente;
+    });
+  };
+
+  const manejarActualizarFotoReporte = (reporteId: string, nuevaFoto: string) => {
+    const estaEnLocales = reportesLocales.some((r) => r.id === reporteId);
+    if (estaEnLocales) {
+      setReportesLocales((prev) => {
+        const actualizados = prev.map((r) =>
+          r.id === reporteId ? { ...r, foto: nuevaFoto } : r
+        );
+        guardarReportesLocales(actualizados);
+        return actualizados;
+      });
+      return;
+    }
+
+    setOverridesReportes((prev) => {
+      const previo = prev[reporteId] ?? {};
+      const siguiente: Record<string, OverrideReporte> = {
+        ...prev,
+        [reporteId]: {
+          ...previo,
+          foto: nuevaFoto,
         },
       };
       guardarOverridesReportes(siguiente);
@@ -372,6 +400,7 @@ export default function App() {
             criterios={criteriosActivos}
             onConfirmarReporte={manejarConfirmarReporte}
             onToggleSolucionado={manejarToggleSolucionado}
+            onActualizarFotoReporte={manejarActualizarFotoReporte}
           />
         ) : (
           <ModeloReglas
