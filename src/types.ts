@@ -17,6 +17,8 @@ export type NivelCriticidad = 'Bajo' | 'Medio' | 'Alto';
 
 export type OrigenReporte = 'campo' | 'ciudadano' | 'importado';
 
+export type EstadoReporte = 'activo' | 'solucionado';
+
 export interface CuadraVia {
   id: string;
   nombre: string;
@@ -56,10 +58,64 @@ export interface Reporte {
   actor: TipoActor;
   foto?: string;
   observacion?: string;
+  confirmaciones?: number;
+  ultima_confirmacion?: string;
+  estado?: EstadoReporte;
+  solucionado_en?: string;
+  validacion_ia?: {
+    valida: boolean;
+    resumen: string;
+  };
   criticidad: {
     puntaje: number;
     nivel: NivelCriticidad;
   };
+}
+
+export interface OverrideReporte {
+  confirmaciones?: number;
+  ultima_confirmacion?: string;
+  estado?: EstadoReporte;
+  solucionado_en?: string;
+}
+
+export interface ZonaProximidad {
+  id: string;
+  categoria: CategoriaObstruccion;
+  centro: { lat: number; lng: number };
+  radioMetros: number;
+  reportes: Reporte[];
+  cantidadRegistros: number;
+  cantidadAcumulada: number;
+  primerReporte: string;
+  ultimoReporte: string;
+  tiempoEntreReportesTexto: string;
+  tiempoDesdeUltimoTexto: string;
+  esAlerta: boolean;
+  mensajeAlerta: string;
+  reportePrincipal: Reporte;
+}
+
+export interface ResultadoBusquedaUbicacion {
+  id: string;
+  nombre: string;
+  detalle: string;
+  lat: number;
+  lng: number;
+  tipo: 'coordenada' | 'cuadra' | 'barrio' | 'lugar' | 'direccion';
+  zoom?: number;
+}
+
+export interface ResultadoValidacionFoto {
+  valida: boolean;
+  muyBorrosa: boolean;
+  iluminacionInsuficiente: boolean;
+  imagenBlancaONegra: boolean;
+  observaIncidente: boolean;
+  correspondeCategoria: boolean;
+  posibleFalsaOCaptura: boolean;
+  motivoRechazo: string;
+  resumen: string;
 }
 
 export interface FiltrosActivos {

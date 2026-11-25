@@ -1,6 +1,14 @@
-import { CuadraVia, Reporte, ZonaPrivacidad } from '../types';
+import {
+  CategoriaObstruccion,
+  CuadraVia,
+  OverrideReporte,
+  Reporte,
+  ResultadoValidacionFoto,
+  ZonaPrivacidad,
+} from '../types';
 
 const STORAGE_KEY_LOCAL = 'vigia_santa_marta_reportes_locales_v3_29h3_vm';
+const STORAGE_KEY_OVERRIDES = 'vigia_santa_marta_overrides_v1';
 
 /**
  * Calcula la distancia aproximada en metros entre dos coordenadas (Haversine).
@@ -94,6 +102,145 @@ export function procesarYAnonimizarFoto(
     };
     reader.readAsDataURL(archivo);
   });
+}
+
+/**
+ * Verificación previa rápida de luminancia y contraste para detectar imágenes completamente
+ * negras, completamente blancas o sin información visual antes/junto con el análisis de IA.
+ */
+export function analizarCalidadBasicaImagen(dataUrl: string): Promise<{
+  esSolidaONula: boolean;
+  motivo?: string;
+}> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onerror = () =>
+      resolve({
+        esSolidaONula: true,
+        motivo: 'No se pudo leer la imagen. Por favor, toma una nueva fotografía.',
+      });
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const w = 64;
+      const h = 64;
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve({ esSolidaONula: false });
+        return;
+      }
+      ctx.drawImage(img, 0, 0, w, h);
+      const data = ctx.getImageData(0, 0, w, h).data;
+      let sumaLum = 0;
+      let sumaSq = 0;
+      const n = w * h;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+        sumaLum += lum;
+        sumaSq += lum * lum;
+      }
+
+      const promedio = sumaLum / n;
+      const varianza = Math.max(0, sumaSq / n - promedio * promedio);
+      const desviacion = Math.sqrt(varianza);
+
+      if (promedio < 12 && desviacion < 10) {
+        resolve({
+          esSolidaONula: true,
+          motivo:
+            'La fotografía está completamente negra o sin iluminación suficiente. Toma una nueva foto con mejor luz.',
+        });
+        return;
+      }
+
+      if (promedio > 245 && desviacion < 10) {
+        resolve({
+          esSolidaONula: true,
+          motivo:
+            'La fotografía está completamente blanca o sobreexpuesta. Toma una nueva foto enfocando claramente el incidente.',
+        });
+        return;
+      }
+
+      if (desviacion < 6) {
+        resolve({
+          esSolidaONula: true,
+          motivo:
+            'La imagen no contiene detalles visibles o es de un color uniforme de muy baja calidad. Toma una nueva fotografía.',
+        });
+        return;
+      }
+
+      resolve({ esSolidaONula: false });
+    };
+    img.src = dataUrl;
+  });
+}
+
+/**
+ * Envía la fotografía al servidor para validación inteligente mediante IA (calidad,
+ * iluminación, autenticidad, presencia real de incidente y correspondencia de categoría).
+ */
+export async function validarEvidenciaFoto(
+  dataUrl: string,
+  categoria: CategoriaObstruccion
+): Promise<{ resultado: ResultadoValidacionFoto | null; error?: string }> {
+  const previa = await analizarCalidadBasicaImagen(dataUrl);
+  if (previa.esSolidaONula) {
+    return {
+      resultado: {
+        valida: false,
+        muyBorrosa: false,
+        iluminacionInsuficiente: true,
+        imagenBlancaONegra: true,
+        observaIncidente: false,
+        correspondeCategoria: false,
+        posibleFalsaOCaptura: false,
+        motivoRechazo:
+          previa.motivo ??
+          'La imagen no cumple con la calidad mínima. Toma una nueva fotografía.',
+        resumen: '',
+      },
+    };
+  }
+
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(dataUrl);
+  if (!match) {
+    return {
+      resultado: null,
+      error: 'Formato de imagen no compatible para validación automática.',
+    };
+  }
+
+  const [, mimeType, imagenBase64] = match;
+
+  try {
+    const resp = await fetch('/api/validar-evidencia', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imagenBase64, mimeType, categoria }),
+    });
+
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      return {
+        resultado: null,
+        error:
+          typeof data?.error === 'string'
+            ? data.error
+            : 'No se pudo completar la validación inteligente de la fotografía.',
+      };
+    }
+
+    return { resultado: data as ResultadoValidacionFoto };
+  } catch {
+    return {
+      resultado: null,
+      error: 'Sin conexión con el servicio de validación inteligente de fotografías.',
+    };
+  }
 }
 
 /**
@@ -219,9 +366,6 @@ export function aplicarPixelacionEnZonas(
   });
 }
 
-/**
- * Lee los reportes nuevos/importados guardados en localStorage.
- */
 export function cargarReportesLocales(): Reporte[] {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY_LOCAL);
@@ -233,9 +377,6 @@ export function cargarReportesLocales(): Reporte[] {
   }
 }
 
-/**
- * Guarda los reportes locales/importados en localStorage.
- */
 export function guardarReportesLocales(reportes: Reporte[]): boolean {
   try {
     window.localStorage.setItem(STORAGE_KEY_LOCAL, JSON.stringify(reportes));
@@ -245,15 +386,40 @@ export function guardarReportesLocales(reportes: Reporte[]): boolean {
   }
 }
 
-/**
- * Limpia únicamente los reportes guardados en localStorage.
- */
 export function limpiarReportesLocales(): void {
   try {
     window.localStorage.removeItem(STORAGE_KEY_LOCAL);
+    window.localStorage.removeItem(STORAGE_KEY_OVERRIDES);
   } catch {
     // Ignorar error de almacenamiento
   }
+}
+
+export function cargarOverridesReportes(): Record<string, OverrideReporte> {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY_OVERRIDES);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, OverrideReporte>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function guardarOverridesReportes(overrides: Record<string, OverrideReporte>): boolean {
+  try {
+    window.localStorage.setItem(STORAGE_KEY_OVERRIDES, JSON.stringify(overrides));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function obtenerFechaHoraLocalActual(): string {
+  const ahora = new Date();
+  const offset = ahora.getTimezoneOffset();
+  const local = new Date(ahora.getTime() - offset * 60000);
+  return local.toISOString().slice(0, 16);
 }
 
 /**
@@ -262,7 +428,8 @@ export function limpiarReportesLocales(): void {
 export function calcularUsoAlmacenamientoKB(): number {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY_LOCAL) ?? '';
-    return Math.round((raw.length * 2) / 1024);
+    const ov = window.localStorage.getItem(STORAGE_KEY_OVERRIDES) ?? '';
+    return Math.round(((raw.length + ov.length) * 2) / 1024);
   } catch {
     return 0;
   }

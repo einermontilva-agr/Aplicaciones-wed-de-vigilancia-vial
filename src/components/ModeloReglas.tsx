@@ -91,13 +91,13 @@ export const ModeloReglas: React.FC<ModeloReglasProps> = ({
   };
 
   return (
-    <section className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 space-y-6">
-      <div className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-end">
+    <section className="mx-auto max-w-[1440px] space-y-6 px-4 py-6 sm:px-6">
+      <div className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-5 dark:border-slate-800 sm:flex-row sm:items-end">
         <div>
-          <p className="text-xs font-medium text-slate-500">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
             Transparencia algorítmica · criterios.json, vias.json y reglas de resumen
           </p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl">
             Modelo de criticidad y reglas operativas
           </h1>
         </div>
@@ -106,7 +106,7 @@ export const ModeloReglas: React.FC<ModeloReglasProps> = ({
           <button
             type="button"
             onClick={onRestablecerCriterios}
-            className="flex min-h-[40px] items-center gap-1.5 border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 whitespace-nowrap cursor-pointer"
+            className="flex min-h-[40px] items-center gap-1.5 border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap cursor-pointer"
           >
             <RotateCcw className="h-3.5 w-3.5" />
             Restablecer pesos de criterios.json
@@ -115,20 +115,19 @@ export const ModeloReglas: React.FC<ModeloReglasProps> = ({
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* Simulador interactivo de pesos de criterios.json */}
-        <div className="border border-slate-200 bg-white p-5 lg:col-span-6 space-y-5">
+        <div className="space-y-5 border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 lg:col-span-6">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
               Pesos vigentes de criterios.json (simulador en vivo)
             </h2>
-            <p className="mt-1 text-xs text-slate-600">
+            <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
               Modifica cualquier peso para comprobar cómo cambia la criticidad de cada reporte, el mapa de calor y el Top 5 del resumen operativo sin editar la lógica.
             </p>
           </div>
 
           <div className="space-y-4">
             <div>
-              <h3 className="mb-2 text-xs font-semibold text-slate-700">
+              <h3 className="mb-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
                 1. Categoría de obstrucción
               </h3>
               <div className="space-y-2">
@@ -136,9 +135,9 @@ export const ModeloReglas: React.FC<ModeloReglasProps> = ({
                   (cat) => (
                     <div
                       key={cat}
-                      className="flex items-center justify-between gap-4 border border-slate-100 bg-slate-50 px-3 py-2 text-xs"
+                      className="flex items-center justify-between gap-4 border border-slate-100 bg-slate-50 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950"
                     >
-                      <span className="text-slate-800">{ETIQUETAS_CATEGORIA[cat]}</span>
+                      <span className="text-slate-800 dark:text-slate-200">{ETIQUETAS_CATEGORIA[cat]}</span>
                       <div className="flex items-center gap-2 shrink-0">
                         <input
                           type="number"
@@ -148,9 +147,9 @@ export const ModeloReglas: React.FC<ModeloReglasProps> = ({
                           onChange={(e) =>
                             cambiarPesoCategoria(cat, Number(e.target.value) || 0)
                           }
-                          className="w-16 border border-slate-300 bg-white px-2 py-1 text-right font-mono font-semibold text-slate-900"
+                          className="w-16 border border-slate-300 bg-white px-2 py-1 text-right font-mono font-semibold text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                         />
-                        <span className="font-mono text-slate-500">pts</span>
+                        <span className="font-mono text-slate-500 dark:text-slate-400">pts</span>
                       </div>
                     </div>
                   )
@@ -160,23 +159,23 @@ export const ModeloReglas: React.FC<ModeloReglasProps> = ({
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <h3 className="mb-2 text-xs font-semibold text-slate-700">
+                <h3 className="mb-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
                   2. Tipo de vía (vias.json)
                 </h3>
                 <div className="space-y-2">
                   {(['arterial', 'secundaria'] as const).map((v) => (
                     <div
                       key={v}
-                      className="flex items-center justify-between gap-2 border border-slate-100 bg-slate-50 px-3 py-2 text-xs"
+                      className="flex items-center justify-between gap-2 border border-slate-100 bg-slate-50 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950"
                     >
-                      <span className="text-slate-800">{ETIQUETAS_VIA[v]}</span>
+                      <span className="text-slate-800 dark:text-slate-200">{ETIQUETAS_VIA[v]}</span>
                       <input
                         type="number"
                         min={0}
                         max={6}
                         value={criteriosActivos.via[v]}
                         onChange={(e) => cambiarPesoVia(v, Number(e.target.value) || 0)}
-                        className="w-14 border border-slate-300 bg-white px-2 py-1 text-right font-mono font-semibold text-slate-900"
+                        className="w-14 border border-slate-300 bg-white px-2 py-1 text-right font-mono font-semibold text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                       />
                     </div>
                   ))}
@@ -184,16 +183,16 @@ export const ModeloReglas: React.FC<ModeloReglasProps> = ({
               </div>
 
               <div>
-                <h3 className="mb-2 text-xs font-semibold text-slate-700">
+                <h3 className="mb-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
                   3. Franja horaria
                 </h3>
                 <div className="space-y-2">
                   {(['pico', 'valle'] as const).map((fr) => (
                     <div
                       key={fr}
-                      className="flex items-center justify-between gap-2 border border-slate-100 bg-slate-50 px-3 py-2 text-xs"
+                      className="flex items-center justify-between gap-2 border border-slate-100 bg-slate-50 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950"
                     >
-                      <span className="text-slate-800">{ETIQUETAS_FRANJA[fr]}</span>
+                      <span className="text-slate-800 dark:text-slate-200">{ETIQUETAS_FRANJA[fr]}</span>
                       <input
                         type="number"
                         min={0}
@@ -202,7 +201,7 @@ export const ModeloReglas: React.FC<ModeloReglasProps> = ({
                         onChange={(e) =>
                           cambiarPesoFranja(fr, Number(e.target.value) || 0)
                         }
-                        className="w-14 border border-slate-300 bg-white px-2 py-1 text-right font-mono font-semibold text-slate-900"
+                        className="w-14 border border-slate-300 bg-white px-2 py-1 text-right font-mono font-semibold text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                       />
                     </div>
                   ))}
@@ -210,11 +209,11 @@ export const ModeloReglas: React.FC<ModeloReglasProps> = ({
               </div>
             </div>
 
-            <div className="border-t border-slate-100 pt-3 text-xs text-slate-600">
-              <span className="font-semibold text-slate-800">Horas pico:</span>{' '}
+            <div className="border-t border-slate-100 pt-3 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-400">
+              <span className="font-semibold text-slate-800 dark:text-slate-200">Horas pico:</span>{' '}
               <span className="font-mono">{criteriosActivos.horas_pico.join(' · ')}</span>
               {' · '}
-              <span className="font-semibold text-slate-800">Rangos:</span>{' '}
+              <span className="font-semibold text-slate-800 dark:text-slate-200">Rangos:</span>{' '}
               <span className="font-mono">
                 Bajo [{criteriosActivos.niveles.Bajo[0]}–{criteriosActivos.niveles.Bajo[1]}], Medio [
                 {criteriosActivos.niveles.Medio[0]}–{criteriosActivos.niveles.Medio[1]}], Alto [
@@ -224,14 +223,13 @@ export const ModeloReglas: React.FC<ModeloReglasProps> = ({
           </div>
         </div>
 
-        {/* Verificación paso a paso (cálculo a mano) */}
-        <div className="border border-slate-200 bg-white p-5 lg:col-span-6 space-y-4">
+        <div className="space-y-4 border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 lg:col-span-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="text-base font-semibold text-slate-900">
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
                 Verificación manual paso a paso · Dos casos (RF-02)
               </h2>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Compara dos registros calculados a mano contra el resultado del sistema.
               </p>
             </div>
@@ -259,14 +257,14 @@ export const ModeloReglas: React.FC<ModeloReglasProps> = ({
                 caso.desglose && (
                   <div
                     key={caso.titulo}
-                    className="space-y-2.5 border border-slate-200 bg-slate-50 p-3.5 text-xs"
+                    className="space-y-2.5 border border-slate-200 bg-slate-50 p-3.5 text-xs dark:border-slate-800 dark:bg-slate-950"
                   >
-                    <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-2">
-                      <span className="font-semibold text-slate-900">{caso.titulo}</span>
+                    <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-2 dark:border-slate-800">
+                      <span className="font-semibold text-slate-900 dark:text-slate-100">{caso.titulo}</span>
                       <select
                         value={caso.valorId}
                         onChange={(e) => caso.onChange(e.target.value)}
-                        className="min-h-[32px] border border-slate-300 bg-white px-2 font-mono text-[11px] text-slate-900"
+                        className="min-h-[32px] border border-slate-300 bg-white px-2 font-mono text-[11px] text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                       >
                         {reportes.map((r) => (
                           <option key={r.id} value={r.id}>
@@ -276,11 +274,11 @@ export const ModeloReglas: React.FC<ModeloReglasProps> = ({
                       </select>
                     </div>
 
-                    <div className="font-mono text-[11px] text-slate-600">
+                    <div className="font-mono text-[11px] text-slate-600 dark:text-slate-400">
                       {caso.reporte.fecha_hora.replace('T', ' ')} · {caso.reporte.cuadra}
                     </div>
 
-                    <ol className="space-y-1 font-mono text-[11px] text-slate-700 tabular-nums">
+                    <ol className="space-y-1 font-mono text-[11px] text-slate-700 dark:text-slate-300 tabular-nums">
                       <li className="flex justify-between">
                         <span>1. Categoría ({caso.reporte.categoria})</span>
                         <span className="font-semibold">+{caso.desglose.puntosCategoria}</span>
@@ -295,7 +293,7 @@ export const ModeloReglas: React.FC<ModeloReglasProps> = ({
                       </li>
                     </ol>
 
-                    <div className="flex items-center justify-between border-t border-slate-200 pt-2 font-mono text-xs font-bold text-slate-900 tabular-nums">
+                    <div className="flex items-center justify-between border-t border-slate-200 pt-2 font-mono text-xs font-bold text-slate-900 dark:border-slate-800 dark:text-slate-100 tabular-nums">
                       <span>
                         {caso.desglose.puntosCategoria} + {caso.desglose.puntosVia} +{' '}
                         {caso.desglose.puntosFranja} = {caso.desglose.puntaje} pts
@@ -303,10 +301,10 @@ export const ModeloReglas: React.FC<ModeloReglasProps> = ({
                       <span
                         className={
                           caso.desglose.nivel === 'Alto'
-                            ? 'text-[#DC2626]'
+                            ? 'text-[#DC2626] dark:text-red-400'
                             : caso.desglose.nivel === 'Medio'
-                              ? 'text-[#D97706]'
-                              : 'text-[#15803D]'
+                              ? 'text-[#D97706] dark:text-amber-400'
+                              : 'text-[#15803D] dark:text-emerald-400'
                         }
                       >
                         {caso.desglose.nivel}
@@ -318,16 +316,16 @@ export const ModeloReglas: React.FC<ModeloReglasProps> = ({
           </div>
 
           <div>
-            <h3 className="mb-2 text-xs font-semibold text-slate-800">
+            <h3 className="mb-2 text-xs font-semibold text-slate-800 dark:text-slate-200">
               Reglas escritas del resumen operativo (resumen.ts)
             </h3>
-            <div className="divide-y divide-slate-200 border border-slate-200 text-xs">
+            <div className="divide-y divide-slate-200 border border-slate-200 text-xs dark:divide-slate-800 dark:border-slate-800">
               {REGLAS_OPERATIVAS.map((regla) => (
                 <div key={regla.id} className="px-3 py-2">
-                  <span className="font-mono font-semibold text-[#0B3B69]">{regla.id}</span>
-                  <span className="mx-1.5 text-slate-300">·</span>
-                  <span className="font-medium text-slate-900">{regla.recomendacion}:</span>{' '}
-                  <span className="text-slate-600">{regla.condicion}</span>
+                  <span className="font-mono font-semibold text-[#0B3B69] dark:text-sky-400">{regla.id}</span>
+                  <span className="mx-1.5 text-slate-300 dark:text-slate-700">·</span>
+                  <span className="font-medium text-slate-900 dark:text-slate-100">{regla.recomendacion}:</span>{' '}
+                  <span className="text-slate-600 dark:text-slate-400">{regla.condicion}</span>
                 </div>
               ))}
             </div>
@@ -335,17 +333,16 @@ export const ModeloReglas: React.FC<ModeloReglasProps> = ({
         </div>
       </div>
 
-      {/* Tabla de las 10 cuadras de Santa Marta clasificadas en vias.json */}
-      <div className="border border-slate-200 bg-white">
-        <div className="border-b border-slate-200 px-5 py-3.5">
-          <h2 className="text-base font-semibold text-slate-900">
+      <div className="border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="border-b border-slate-200 px-5 py-3.5 dark:border-slate-800">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
             Calle 29H3 y Villa Marbella · {vias.length} cuadras clasificadas (vias.json)
           </h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600">
+              <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
                 <th className="px-4 py-2.5">Código</th>
                 <th className="px-4 py-2.5">Tramo vial</th>
                 <th className="px-4 py-2.5">Sector</th>
@@ -353,16 +350,16 @@ export const ModeloReglas: React.FC<ModeloReglasProps> = ({
                 <th className="px-4 py-2.5 text-right">Coordenadas centro</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {vias.map((v) => (
-                <tr key={v.id} className="hover:bg-slate-50/70">
-                  <td className="px-4 py-2.5 font-mono font-semibold text-slate-900">{v.id}</td>
-                  <td className="px-4 py-2.5 text-slate-800">{v.nombre}</td>
-                  <td className="px-4 py-2.5 text-slate-600">{v.sector}</td>
-                  <td className="px-4 py-2.5 font-medium text-slate-800">
+                <tr key={v.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
+                  <td className="px-4 py-2.5 font-mono font-semibold text-slate-900 dark:text-slate-100">{v.id}</td>
+                  <td className="px-4 py-2.5 text-slate-800 dark:text-slate-200">{v.nombre}</td>
+                  <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400">{v.sector}</td>
+                  <td className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">
                     {ETIQUETAS_VIA[v.tipo_via]} (+{criteriosActivos.via[v.tipo_via]} pts)
                   </td>
-                  <td className="px-4 py-2.5 text-right font-mono text-slate-500 tabular-nums">
+                  <td className="px-4 py-2.5 text-right font-mono text-slate-500 dark:text-slate-400 tabular-nums">
                     {v.lat.toFixed(4)}, {v.lng.toFixed(4)}
                   </td>
                 </tr>

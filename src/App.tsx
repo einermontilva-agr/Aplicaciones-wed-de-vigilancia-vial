@@ -1,12 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Monitor, Moon, Sun } from 'lucide-react';
 import {
+  cargarOverridesReportes,
   cargarReportesLocales,
   combinarSinDuplicados,
+  guardarOverridesReportes,
   guardarReportesLocales,
   limpiarReportesLocales,
+  obtenerFechaHoraLocalActual,
 } from './logic/captura';
 import { recalcularReportes } from './logic/criticidad';
-import { CriteriosCriticidad, CuadraVia, Reporte } from './types';
+import { RADIO_PROXIMIDAD_DEFECTO } from './logic/proximidad';
+import {
+  aplicarTemaAlDocumento,
+  cargarTemaPreferido,
+  guardarTemaPreferido,
+  TemaModo,
+} from './logic/tema';
+import { CriteriosCriticidad, CuadraVia, OverrideReporte, Reporte } from './types';
 import { CapturaRapida } from './components/CapturaRapida';
 import { ModeloReglas } from './components/ModeloReglas';
 import { TablaRegistros } from './components/TablaRegistros';
@@ -21,8 +32,30 @@ export default function App() {
   const [criteriosActivos, setCriteriosActivos] = useState<CriteriosCriticidad | null>(null);
   const [reportesBase, setReportesBase] = useState<Reporte[]>([]);
   const [reportesLocales, setReportesLocales] = useState<Reporte[]>([]);
+  const [overridesReportes, setOverridesReportes] = useState<Record<string, OverrideReporte>>(() =>
+    cargarOverridesReportes()
+  );
+  const [radioProximidad, setRadioProximidad] = useState<number>(RADIO_PROXIMIDAD_DEFECTO);
+  const [temaModo, setTemaModo] = useState<TemaModo>(() => cargarTemaPreferido());
+  const [esOscuro, setEsOscuro] = useState<boolean>(() => aplicarTemaAlDocumento(cargarTemaPreferido()));
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState<string>('');
+
+  // Sincronización de tema (claro / oscuro / automático del dispositivo)
+  useEffect(() => {
+    guardarTemaPreferido(temaModo);
+    setEsOscuro(aplicarTemaAlDocumento(temaModo));
+
+    if (temaModo !== 'auto' || typeof window.matchMedia !== 'function') return;
+
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const manejarCambioSistema = () => {
+      setEsOscuro(aplicarTemaAlDocumento('auto'));
+    };
+
+    media.addEventListener('change', manejarCambioSistema);
+    return () => media.removeEventListener('change', manejarCambioSistema);
+  }, [temaModo]);
 
   useEffect(() => {
     let cancelado = false;
@@ -76,14 +109,72 @@ export default function App() {
   const todosLosReportes = useMemo(() => {
     if (!criteriosActivos || vias.length === 0) return [];
     const { combinados } = combinarSinDuplicados(reportesBase, reportesLocales);
-    return recalcularReportes(combinados, vias, criteriosActivos);
-  }, [reportesBase, reportesLocales, vias, criteriosActivos]);
+    const conOverrides = combinados.map((r) => {
+      const ov = overridesReportes[r.id];
+      if (!ov) {
+        return {
+          ...r,
+          confirmaciones: r.confirmaciones ?? 1,
+          estado: r.estado ?? ('activo' as const),
+        };
+      }
+      return {
+        ...r,
+        confirmaciones: ov.confirmaciones ?? r.confirmaciones ?? 1,
+        ultima_confirmacion: ov.ultima_confirmacion ?? r.ultima_confirmacion,
+        estado: ov.estado ?? r.estado ?? 'activo',
+        solucionado_en: ov.solucionado_en ?? r.solucionado_en,
+      };
+    });
+    return recalcularReportes(conOverrides, vias, criteriosActivos);
+  }, [reportesBase, reportesLocales, overridesReportes, vias, criteriosActivos]);
 
   const manejarGuardarReporte = (nuevo: Reporte) => {
     setReportesLocales((prev) => {
       const actualizados = [nuevo, ...prev];
       guardarReportesLocales(actualizados);
       return actualizados;
+    });
+  };
+
+  const manejarConfirmarReporte = (reporteId: string) => {
+    const ahoraLocal = obtenerFechaHoraLocalActual();
+    const existente = todosLosReportes.find((r) => r.id === reporteId);
+    const actualCount = Math.max(1, existente?.confirmaciones ?? 1);
+
+    setOverridesReportes((prev) => {
+      const previo = prev[reporteId] ?? {};
+      const siguiente: Record<string, OverrideReporte> = {
+        ...prev,
+        [reporteId]: {
+          ...previo,
+          confirmaciones: Math.max(actualCount, previo.confirmaciones ?? 1) + 1,
+          ultima_confirmacion: ahoraLocal,
+          estado: 'activo',
+        },
+      };
+      guardarOverridesReportes(siguiente);
+      return siguiente;
+    });
+  };
+
+  const manejarToggleSolucionado = (reporteId: string) => {
+    const ahoraLocal = obtenerFechaHoraLocalActual();
+    const existente = todosLosReportes.find((r) => r.id === reporteId);
+    const nuevoEstado = existente?.estado === 'solucionado' ? 'activo' : 'solucionado';
+
+    setOverridesReportes((prev) => {
+      const previo = prev[reporteId] ?? {};
+      const siguiente: Record<string, OverrideReporte> = {
+        ...prev,
+        [reporteId]: {
+          ...previo,
+          estado: nuevoEstado,
+          solucionado_en: nuevoEstado === 'solucionado' ? ahoraLocal : undefined,
+        },
+      };
+      guardarOverridesReportes(siguiente);
+      return siguiente;
     });
   };
 
@@ -107,6 +198,7 @@ export default function App() {
   const manejarLimpiarLocales = () => {
     limpiarReportesLocales();
     setReportesLocales([]);
+    setOverridesReportes({});
   };
 
   const enlaces: { id: VistaActiva; etiqueta: string }[] = [
@@ -116,15 +208,21 @@ export default function App() {
     { id: 'modelo', etiqueta: 'Modelo y reglas' },
   ];
 
+  const opcionesTema: { id: TemaModo; etiqueta: string; Icono: typeof Sun }[] = [
+    { id: 'claro', etiqueta: 'Claro', Icono: Sun },
+    { id: 'oscuro', etiqueta: 'Oscuro', Icono: Moon },
+    { id: 'auto', etiqueta: 'Automático', Icono: Monitor },
+  ];
+
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
+    <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-100">
       {/* Barra superior: contrato estricto de 3 zonas */}
-      <header className="no-print sticky top-0 z-30 border-b border-slate-200 bg-white">
+      <header className="no-print sticky top-0 z-30 border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-8 px-4 py-3.5 sm:px-6">
           <button
             type="button"
             onClick={() => setVista('tablero')}
-            className="font-display text-lg font-bold tracking-tight text-slate-900 whitespace-nowrap shrink-0 cursor-pointer"
+            className="font-display text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100 whitespace-nowrap shrink-0 cursor-pointer"
           >
             Vigía Vial Santa Marta
           </button>
@@ -142,8 +240,8 @@ export default function App() {
                   onClick={() => setVista(item.id)}
                   className={`border-b-2 py-1 text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                     activo
-                      ? 'border-[#0B3B69] text-[#0B3B69]'
-                      : 'border-transparent text-slate-600 hover:text-slate-900'
+                      ? 'border-[#0B3B69] text-[#0B3B69] dark:border-sky-400 dark:text-sky-400'
+                      : 'border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
                   }`}
                 >
                   {item.etiqueta}
@@ -156,7 +254,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setVista('captura')}
-              className="min-h-[40px] bg-[#0B3B69] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#082c4f] whitespace-nowrap shrink-0 cursor-pointer"
+              className="min-h-[40px] bg-[#0B3B69] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#082c4f] dark:bg-sky-700 dark:hover:bg-sky-600 whitespace-nowrap shrink-0 cursor-pointer"
             >
               Reportar incidente
             </button>
@@ -166,7 +264,7 @@ export default function App() {
         {/* Navegación móvil compacta */}
         <nav
           aria-label="Navegación móvil"
-          className="flex items-center justify-around border-t border-slate-100 bg-white px-2 py-1.5 md:hidden"
+          className="flex items-center justify-around border-t border-slate-100 bg-white px-2 py-1.5 dark:border-slate-800 dark:bg-slate-900 md:hidden"
         >
           {enlaces.map((item) => {
             const activo = vista === item.id;
@@ -177,8 +275,8 @@ export default function App() {
                 onClick={() => setVista(item.id)}
                 className={`px-2 py-1.5 text-xs font-medium whitespace-nowrap cursor-pointer ${
                   activo
-                    ? 'border-b-2 border-[#0B3B69] text-[#0B3B69]'
-                    : 'text-slate-600'
+                    ? 'border-b-2 border-[#0B3B69] text-[#0B3B69] dark:border-sky-400 dark:text-sky-400'
+                    : 'text-slate-600 dark:text-slate-400'
                 }`}
               >
                 {item.etiqueta}
@@ -188,45 +286,92 @@ export default function App() {
         </nav>
       </header>
 
+      {/* Barra de preferencias de espacio de trabajo (Modo claro / oscuro / automático) */}
+      <div className="no-print border-b border-slate-200 bg-slate-100/70 dark:border-slate-800 dark:bg-slate-900/70">
+        <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-3 px-4 py-2 text-xs sm:px-6">
+          <span className="text-slate-600 dark:text-slate-400">
+            Calle 29H3 y Villa Marbella · Radio de agrupación:{' '}
+            <strong className="font-mono text-slate-900 dark:text-slate-100 tabular-nums">
+              {radioProximidad} m
+            </strong>
+          </span>
+
+          <div
+            className="flex items-center gap-1 border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-950"
+            role="group"
+            aria-label="Seleccionar tema de interfaz"
+          >
+            {opcionesTema.map(({ id, etiqueta, Icono }) => {
+              const activo = temaModo === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setTemaModo(id)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium transition-colors whitespace-nowrap cursor-pointer ${
+                    activo
+                      ? 'bg-[#0B3B69] text-white dark:bg-sky-700'
+                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
+                  }`}
+                >
+                  <Icono className="h-3 w-3" />
+                  <span>{etiqueta}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
       {/* Contenido principal */}
       <main className="flex-1">
         {cargando ? (
           <div className="mx-auto max-w-[1440px] px-4 py-12 sm:px-6">
-            <div className="space-y-4 border border-slate-200 bg-white p-6">
-              <div className="h-6 w-64 animate-pulse bg-slate-200" />
-              <div className="h-[420px] w-full animate-pulse bg-slate-100" />
+            <div className="space-y-4 border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+              <div className="h-6 w-64 animate-pulse bg-slate-200 dark:bg-slate-800" />
+              <div className="h-[420px] w-full animate-pulse bg-slate-100 dark:bg-slate-800/60" />
             </div>
           </div>
         ) : errorCarga || !criteriosActivos || !criteriosBase ? (
           <div className="mx-auto max-w-xl px-4 py-16 text-center">
-            <p className="text-base font-semibold text-[#DC2626]">
+            <p className="text-base font-semibold text-[#DC2626] dark:text-red-400">
               No fue posible cargar los archivos de configuración
             </p>
-            <p className="mt-1 text-xs text-slate-600">{errorCarga}</p>
+            <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">{errorCarga}</p>
           </div>
         ) : vista === 'tablero' ? (
           <TableroOperativo
             reportes={todosLosReportes}
-            reportesLocalesCount={reportesLocales.length}
+            reportesLocalesCount={reportesLocales.length + Object.keys(overridesReportes).length}
             vias={vias}
             criterios={criteriosActivos}
+            radioProximidad={radioProximidad}
+            onCambiarRadioProximidad={setRadioProximidad}
+            onConfirmarReporte={manejarConfirmarReporte}
+            onToggleSolucionado={manejarToggleSolucionado}
             onImportarReportes={manejarImportarReportes}
             onLimpiarLocales={manejarLimpiarLocales}
             onIrACaptura={() => setVista('captura')}
+            esOscuro={esOscuro}
           />
         ) : vista === 'captura' ? (
           <CapturaRapida
             vias={vias}
             criterios={criteriosActivos}
             reportesExistentes={todosLosReportes}
+            radioProximidad={radioProximidad}
             onGuardarReporte={manejarGuardarReporte}
+            onConfirmarReporte={manejarConfirmarReporte}
             onIrATablero={() => setVista('tablero')}
+            esOscuro={esOscuro}
           />
         ) : vista === 'registros' ? (
           <TablaRegistros
             reportes={todosLosReportes}
             vias={vias}
             criterios={criteriosActivos}
+            onConfirmarReporte={manejarConfirmarReporte}
+            onToggleSolucionado={manejarToggleSolucionado}
           />
         ) : (
           <ModeloReglas
@@ -240,8 +385,8 @@ export default function App() {
         )}
       </main>
 
-      <footer className="no-print border-t border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-[1440px] flex-col justify-between gap-2 px-4 py-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:px-6">
+      <footer className="no-print border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="mx-auto flex max-w-[1440px] flex-col justify-between gap-2 px-4 py-4 text-xs text-slate-500 dark:text-slate-400 sm:flex-row sm:items-center sm:px-6">
           <span>
             Vigía Vial Santa Marta · Prototipo ciudadano de control de mal parqueo e invasión del espacio público
           </span>

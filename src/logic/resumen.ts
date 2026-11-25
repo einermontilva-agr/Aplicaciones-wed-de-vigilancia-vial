@@ -55,8 +55,8 @@ function obtenerDominante<T extends string>(conteos: Record<T, number>, defecto:
 }
 
 /**
- * Agrupa los reportes por cuadra, suma puntajes, ordena de mayor a menor,
- * toma las cinco cuadras más críticas y aplica las reglas de recomendación (RF-05).
+ * Agrupa los reportes activos por cuadra, pondera confirmaciones (+1) en el puntaje acumulado,
+ * ordena de mayor a menor, toma las cinco cuadras más críticas y aplica las reglas de recomendación (RF-05).
  */
 export function generarResumenOperativo(
   reportes: Reporte[],
@@ -68,8 +68,9 @@ export function generarResumenOperativo(
   const agrupados = new Map<string, Reporte[]>();
 
   for (const rep of reportes) {
+    if (rep.estado === 'solucionado') continue;
     const lista = agrupados.get(rep.cuadra) ?? [];
-    lista.push(reporteNormalizado(rep));
+    lista.push(rep);
     agrupados.set(rep.cuadra, lista);
   }
 
@@ -77,9 +78,13 @@ export function generarResumenOperativo(
 
   for (const [cuadraId, lista] of agrupados.entries()) {
     const via = mapaVias.get(cuadraId);
-    const totalReportes = lista.length;
-    const puntajeAcumulado = lista.reduce((acc, r) => acc + r.criticidad.puntaje, 0);
-    const promedioPuntaje = totalReportes > 0 ? Number((puntajeAcumulado / totalReportes).toFixed(1)) : 0;
+    const totalReportes = lista.reduce((acc, r) => acc + Math.max(1, r.confirmaciones ?? 1), 0);
+    const puntajeAcumulado = lista.reduce(
+      (acc, r) => acc + r.criticidad.puntaje * Math.max(1, r.confirmaciones ?? 1),
+      0
+    );
+    const promedioPuntaje =
+      totalReportes > 0 ? Number((puntajeAcumulado / totalReportes).toFixed(1)) : 0;
 
     let reportesAltoPico = 0;
     let reportesAlto = 0;
@@ -98,13 +103,14 @@ export function generarResumenOperativo(
     };
 
     for (const r of lista) {
-      conteoCat[r.categoria] = (conteoCat[r.categoria] ?? 0) + 1;
-      conteoActor[r.actor] = (conteoActor[r.actor] ?? 0) + 1;
+      const pesoRep = Math.max(1, r.confirmaciones ?? 1);
+      conteoCat[r.categoria] = (conteoCat[r.categoria] ?? 0) + pesoRep;
+      conteoActor[r.actor] = (conteoActor[r.actor] ?? 0) + pesoRep;
       const franja = obtenerFranja(r.fecha_hora, criterios);
       if (r.criticidad.nivel === 'Alto') {
-        reportesAlto += 1;
+        reportesAlto += pesoRep;
         if (franja === 'pico') {
-          reportesAltoPico += 1;
+          reportesAltoPico += pesoRep;
         }
       }
     }
@@ -123,22 +129,22 @@ export function generarResumenOperativo(
     } else if (conteoCat.invasion_anden >= 2 && conteoCat.invasion_anden / totalReportes > 0.5) {
       reglaId = 'R2';
       recomendacion = 'Operativo de espacio público';
-      reglaTexto = `Predomina invasión de andén (${conteoCat.invasion_anden} de ${totalReportes} reportes, ${Math.round((conteoCat.invasion_anden / totalReportes) * 100)} %).`;
+      reglaTexto = `Predomina invasión de andén (${conteoCat.invasion_anden} de ${totalReportes} incidencias, ${Math.round((conteoCat.invasion_anden / totalReportes) * 100)} %).`;
     } else if (conteoActor.vehiculo_carga >= 2 && conteoActor.vehiculo_carga / totalReportes > 0.5) {
       reglaId = 'R3';
       recomendacion = 'Revisar horario de cargue y descargue';
-      reglaTexto = `Predomina vehículo de carga descargando (${conteoActor.vehiculo_carga} de ${totalReportes} reportes, ${Math.round((conteoActor.vehiculo_carga / totalReportes) * 100)} %).`;
+      reglaTexto = `Predomina vehículo de carga descargando (${conteoActor.vehiculo_carga} de ${totalReportes} incidencias, ${Math.round((conteoActor.vehiculo_carga / totalReportes) * 100)} %).`;
     } else if (
       conteoCat.bloqueo_rampa_cebra_paradero >= 2 &&
       conteoCat.bloqueo_rampa_cebra_paradero / totalReportes > 0.5
     ) {
       reglaId = 'R4';
       recomendacion = 'Control de cruces peatonales y paraderos';
-      reglaTexto = `Predomina bloqueo de rampa, cebra o paradero (${conteoCat.bloqueo_rampa_cebra_paradero} de ${totalReportes} reportes, ${Math.round((conteoCat.bloqueo_rampa_cebra_paradero / totalReportes) * 100)} %).`;
+      reglaTexto = `Predomina bloqueo de rampa, cebra o paradero (${conteoCat.bloqueo_rampa_cebra_paradero} de ${totalReportes} incidencias, ${Math.round((conteoCat.bloqueo_rampa_cebra_paradero / totalReportes) * 100)} %).`;
     } else {
       reglaId = 'R5';
       recomendacion = 'Señalización preventiva y ronda de verificación';
-      reglaTexto = `Incidentes distribuidos entre múltiples categorías y actores (${totalReportes} reportes sin patrón único > 50 %).`;
+      reglaTexto = `Incidentes distribuidos entre múltiples categorías y actores (${totalReportes} incidencias sin patrón único > 50 %).`;
     }
 
     resumenes.push({
@@ -162,8 +168,4 @@ export function generarResumenOperativo(
   return resumenes
     .sort((a, b) => b.puntajeAcumulado - a.puntajeAcumulado || b.totalReportes - a.totalReportes)
     .slice(0, limite);
-}
-
-function reporteNormalizado(rep: Reporte): Reporte {
-  return rep;
 }

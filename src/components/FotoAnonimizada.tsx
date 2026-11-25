@@ -17,10 +17,9 @@ interface FotoAnonimizadaProps {
 }
 
 /**
- * Renderiza la evidencia visual del reporte sin desenfoque ni pixelación:
- * - Si el usuario cargó una fotografía, se muestra nítida tal como fue capturada.
- * - Si pertenece a los registros precargados de campo, muestra un esquema vectorial nítido
- *   de la escena urbana (sin bloques borrosos ni pixelados).
+ * Renderiza la evidencia visual del reporte sin desenfoque general:
+ * - Si el usuario cargó una fotografía, se muestra nítida con rostros/placas protegidos.
+ * - Si pertenece a los registros precargados de campo, muestra un esquema vectorial nítido.
  */
 export const FotoAnonimizada: React.FC<FotoAnonimizadaProps> = ({
   foto,
@@ -46,7 +45,7 @@ export const FotoAnonimizada: React.FC<FotoAnonimizadaProps> = ({
           className="h-full w-full object-cover"
         />
         {!compact && (
-          <div className="absolute bottom-2 left-2 bg-slate-950/75 px-2 py-1 font-mono text-[11px] font-medium text-white">
+          <div className="absolute bottom-2 left-2 bg-slate-950/80 px-2 py-1 font-mono text-[11px] font-medium text-white">
             {reporteId} · {cuadra}
           </div>
         )}
@@ -56,7 +55,7 @@ export const FotoAnonimizada: React.FC<FotoAnonimizadaProps> = ({
 
   return (
     <div
-      className={`relative overflow-hidden bg-slate-100 ${className}`}
+      className={`relative overflow-hidden bg-slate-100 dark:bg-slate-800 ${className}`}
       role="img"
       aria-label={`Evidencia ${reporteId}: ${ETIQUETAS_CATEGORIA_CORTA[categoria]} (${ETIQUETAS_ACTOR[actor]})`}
     >
@@ -65,23 +64,19 @@ export const FotoAnonimizada: React.FC<FotoAnonimizadaProps> = ({
         preserveAspectRatio="xMidYMid slice"
         className="block h-full w-full"
       >
-        {/* Cielo y edificaciones nítidas */}
         <rect x="0" y="0" width="320" height="72" fill="#E0F2FE" />
         <rect x="0" y="24" width="76" height="48" fill="#F1F5F9" stroke="#CBD5E1" strokeWidth="1" />
         <rect x="82" y="16" width="110" height="56" fill="#E2E8F0" stroke="#CBD5E1" strokeWidth="1" />
         <rect x="198" y="28" width="122" height="44" fill="#F8FAFC" stroke="#CBD5E1" strokeWidth="1" />
 
-        {/* Andén y bordillo */}
         <rect x="0" y="72" width="320" height="32" fill="#E2E8F0" />
         <rect x="0" y="102" width="320" height="4" fill="#F59E0B" />
 
-        {/* Calzada */}
         <rect x="0" y="106" width="320" height="74" fill="#334155" />
         <line x1="12" y1="142" x2="72" y2="142" stroke="#F8FAFC" strokeWidth="3" strokeDasharray="18 14" />
         <line x1="110" y1="142" x2="210" y2="142" stroke="#F8FAFC" strokeWidth="3" strokeDasharray="18 14" />
         <line x1="245" y1="142" x2="308" y2="142" stroke="#F8FAFC" strokeWidth="3" strokeDasharray="18 14" />
 
-        {/* Cebra peatonal cuando corresponde */}
         {categoria === 'bloqueo_rampa_cebra_paradero' && (
           <g fill="#F8FAFC" opacity="0.9">
             <rect x="120" y="110" width="12" height="62" />
@@ -91,7 +86,6 @@ export const FotoAnonimizada: React.FC<FotoAnonimizadaProps> = ({
           </g>
         )}
 
-        {/* Actor nítido según el tipo de obstrucción */}
         {actor === 'vehiculo_carga' && (
           <g transform={categoria === 'invasion_anden' ? 'translate(86,58)' : 'translate(86,92)'}>
             <rect x="0" y="0" width="106" height="46" rx="4" fill="#B45309" />

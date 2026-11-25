@@ -1,11 +1,15 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   Camera,
   CheckCircle2,
   Clock,
+  Loader2,
   LocateFixed,
   MapPin,
+  PlusCircle,
   RotateCcw,
+  ShieldAlert,
   ShieldCheck,
   Trash2,
   Undo2,
@@ -16,8 +20,11 @@ import {
   detectarZonasPrivacidad,
   encontrarCuadraMasCercana,
   generarNuevoIdReporte,
+  obtenerFechaHoraLocalActual,
   procesarYAnonimizarFoto,
+  validarEvidenciaFoto,
 } from '../logic/captura';
+import { buscarIncidenteCercano } from '../logic/proximidad';
 import {
   CategoriaObstruccion,
   CriteriosCriticidad,
@@ -27,24 +34,23 @@ import {
   ETIQUETAS_FRANJA,
   ETIQUETAS_VIA,
   Reporte,
+  ResultadoBusquedaUbicacion,
+  ResultadoValidacionFoto,
   TipoActor,
   ZonaPrivacidad,
 } from '../types';
+import { BuscadorUbicacion } from './BuscadorUbicacion';
 import { MapaSantaMarta } from './MapaSantaMarta';
 
 interface CapturaRapidaProps {
   vias: CuadraVia[];
   criterios: CriteriosCriticidad;
   reportesExistentes: Reporte[];
+  radioProximidad: number;
   onGuardarReporte: (nuevo: Reporte) => void;
+  onConfirmarReporte: (reporteId: string) => void;
   onIrATablero: () => void;
-}
-
-function obtenerFechaHoraLocalActual(): string {
-  const ahora = new Date();
-  const offset = ahora.getTimezoneOffset();
-  const local = new Date(ahora.getTime() - offset * 60000);
-  return local.toISOString().slice(0, 16);
+  esOscuro: boolean;
 }
 
 const CATEGORIAS_OPCIONES: { id: CategoriaObstruccion; titulo: string; detalle: string }[] = [
@@ -76,8 +82,11 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
   vias,
   criterios,
   reportesExistentes,
+  radioProximidad,
   onGuardarReporte,
+  onConfirmarReporte,
   onIrATablero,
+  esOscuro,
 }) => {
   const primeraCuadra = vias[0];
 
@@ -97,6 +106,9 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
   const [zonasPrivacidad, setZonasPrivacidad] = useState<ZonaPrivacidad[]>([]);
   const [avisoPrivacidad, setAvisoPrivacidad] = useState<string>('');
   const [errorPrivacidad, setErrorPrivacidad] = useState<string>('');
+  const [validacionFoto, setValidacionFoto] = useState<ResultadoValidacionFoto | null>(null);
+  const [errorValidacionServicio, setErrorValidacionServicio] = useState<string>('');
+  const [validandoFoto, setValidandoFoto] = useState(false);
   const [procesandoFoto, setProcesandoFoto] = useState(false);
   const [dibujoInicio, setDibujoInicio] = useState<{ x: number; y: number } | null>(null);
   const [dibujoActual, setDibujoActual] = useState<{ x: number; y: number } | null>(null);
@@ -107,6 +119,7 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
   const [ultimoGuardado, setUltimoGuardado] = useState<{
     reporte: Reporte;
     duracionSegundos: number | null;
+    esConfirmacion?: boolean;
   } | null>(null);
   const [errorForm, setErrorForm] = useState<string>('');
 
@@ -160,6 +173,19 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
     [vias, cuadraId]
   );
 
+  // Detección de incidente cercano del mismo tipo para ofrecer "Volver a reportar (+1)"
+  const incidenteCercano = useMemo(
+    () =>
+      buscarIncidenteCercano(
+        coordenada.lat,
+        coordenada.lng,
+        categoria,
+        reportesExistentes,
+        radioProximidad
+      ),
+    [coordenada.lat, coordenada.lng, categoria, reportesExistentes, radioProximidad]
+  );
+
   const manejarSeleccionMapa = (lat: number, lng: number) => {
     iniciarCronometroSiNoCorre();
     setCoordenada({ lat, lng });
@@ -167,6 +193,18 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
     if (cuadra) {
       setCuadraId(cuadra.id);
       setEstadoGps(`Ubicación fijada en mapa · cuadra asignada: ${cuadra.id} (a ${distancia} m)`);
+    }
+  };
+
+  const manejarSeleccionBuscador = (res: ResultadoBusquedaUbicacion) => {
+    iniciarCronometroSiNoCorre();
+    setCoordenada({ lat: res.lat, lng: res.lng });
+    const { cuadra, distancia } = encontrarCuadraMasCercana(res.lat, res.lng, vias);
+    if (cuadra) {
+      setCuadraId(cuadra.id);
+      setEstadoGps(
+        `Ubicación enfocada: ${res.nombre} · cuadra cercana: ${cuadra.id} (a ${distancia} m)`
+      );
     }
   };
 
@@ -196,20 +234,19 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
         const lng = Number(pos.coords.longitude.toFixed(6));
         const { cuadra, distancia } = encontrarCuadraMasCercana(lat, lng, vias);
 
-        // Si el usuario está a más de 3 km (p. ej. probando fuera de Santa Marta), mantenemos su vista centrada
         if (cuadra && distancia <= 3000) {
           setCoordenada({ lat, lng });
           setCuadraId(cuadra.id);
           setEstadoGps(`GPS capturado (±${Math.round(pos.coords.accuracy)} m) · Cuadra ${cuadra.id}`);
         } else if (cuadra) {
           setEstadoGps(
-            `GPS detectado a ${(distancia / 1000).toFixed(1)} km de la zona piloto. Toca el mapa de Santa Marta o elige la cuadra manualmente.`
+            `GPS detectado a ${(distancia / 1000).toFixed(1)} km de la zona piloto. Toca el mapa de Santa Marta o usa el buscador de direcciones.`
           );
         }
       },
       () => {
         setBuscandoGps(false);
-        setEstadoGps('No se pudo obtener el GPS. Toca directamente una calle en el mapa o selecciona la cuadra.');
+        setEstadoGps('No se pudo obtener el GPS. Toca directamente una calle en el mapa o usa el buscador.');
       },
       { enableHighAccuracy: true, timeout: 7000 }
     );
@@ -223,6 +260,42 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
       height: pixelada.height,
       sizeKB: pixelada.sizeKB,
     });
+  };
+
+  const ejecutarValidacionYPrivacidad = async (
+    baseOriginal: string,
+    categoriaActual: CategoriaObstruccion,
+    soloRevalidarCategoria = false
+  ) => {
+    setValidandoFoto(true);
+    setErrorValidacionServicio('');
+    setValidacionFoto(null);
+
+    const { resultado, error: errVal } = await validarEvidenciaFoto(
+      baseOriginal,
+      categoriaActual
+    );
+    setValidandoFoto(false);
+
+    if (errVal || !resultado) {
+      setErrorValidacionServicio(
+        errVal ?? 'No se pudo completar la validación inteligente de la fotografía.'
+      );
+      return;
+    }
+
+    setValidacionFoto(resultado);
+
+    if (!resultado.valida) {
+      setAvisoPrivacidad('');
+      return;
+    }
+
+    if (soloRevalidarCategoria && zonasPrivacidad.length > 0) {
+      return;
+    }
+
+    await ejecutarDeteccionAutomatica(baseOriginal);
   };
 
   const ejecutarDeteccionAutomatica = async (baseOriginal: string) => {
@@ -255,16 +328,26 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
     setProcesandoFoto(false);
   };
 
+  // Si hay una foto cargada y el usuario cambia la categoría, revalidamos correspondencia con IA
+  useEffect(() => {
+    if (!fotoBaseOriginal) return;
+    ejecutarValidacionYPrivacidad(fotoBaseOriginal, categoria, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoria]);
+
   const procesarFoto = async (file: File) => {
     setProcesandoFoto(true);
     setErrorForm('');
     setErrorPrivacidad('');
+    setErrorValidacionServicio('');
+    setValidacionFoto(null);
     try {
       const res = await procesarYAnonimizarFoto(file, 0, 800);
       setFotoBaseOriginal(res.dataUrl);
       setFotoDataUrl(res.dataUrl);
       setFotoMeta({ width: res.width, height: res.height, sizeKB: res.sizeKB });
-      await ejecutarDeteccionAutomatica(res.dataUrl);
+      setProcesandoFoto(false);
+      await ejecutarValidacionYPrivacidad(res.dataUrl, categoria, false);
     } catch (err) {
       setErrorForm(err instanceof Error ? err.message : 'Error al procesar la fotografía.');
       setProcesandoFoto(false);
@@ -278,6 +361,18 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
     await procesarFoto(archivo);
   };
 
+  const limpiarFoto = () => {
+    setFotoBaseOriginal(undefined);
+    setFotoDataUrl(undefined);
+    setFotoMeta(null);
+    setZonasPrivacidad([]);
+    setAvisoPrivacidad('');
+    setErrorPrivacidad('');
+    setValidacionFoto(null);
+    setErrorValidacionServicio('');
+    if (inputFotoRef.current) inputFotoRef.current.value = '';
+  };
+
   const obtenerCoordNormalizada = (clientX: number, clientY: number) => {
     const el = previewContainerRef.current;
     if (!el) return null;
@@ -289,7 +384,7 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
   };
 
   const manejarPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!fotoBaseOriginal || procesandoFoto) return;
+    if (!fotoBaseOriginal || procesandoFoto || validandoFoto) return;
     const pt = obtenerCoordNormalizada(e.clientX, e.clientY);
     if (!pt) return;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -348,6 +443,29 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
     );
   };
 
+  const manejarVolverAReportarExistente = () => {
+    if (!incidenteCercano) return;
+    const duracion = detenerCronometro();
+    onConfirmarReporte(incidenteCercano.reporte.id);
+    setUltimoGuardado({
+      reporte: {
+        ...incidenteCercano.reporte,
+        confirmaciones: Math.max(1, incidenteCercano.reporte.confirmaciones ?? 1) + 1,
+      },
+      duracionSegundos: duracion,
+      esConfirmacion: true,
+    });
+    setErrorForm('');
+  };
+
+  const fotoBloqueadaPorIA =
+    Boolean(fotoDataUrl) &&
+    (validandoFoto ||
+      procesandoFoto ||
+      Boolean(errorValidacionServicio) ||
+      !validacionFoto ||
+      !validacionFoto.valida);
+
   const manejarEnviar = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorForm('');
@@ -355,6 +473,24 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
     if (!cuadraId || !coordenada.lat || !coordenada.lng) {
       setErrorForm('Debes seleccionar una cuadra o ubicación en el mapa.');
       return;
+    }
+
+    if (fotoDataUrl) {
+      if (validandoFoto || procesandoFoto) {
+        setErrorForm('Espera a que finalice la validación inteligente de la fotografía.');
+        return;
+      }
+      if (errorValidacionServicio) {
+        setErrorForm(errorValidacionServicio);
+        return;
+      }
+      if (!validacionFoto || !validacionFoto.valida) {
+        setErrorForm(
+          validacionFoto?.motivoRechazo ||
+            'La fotografía fue rechazada por los criterios mínimos de calidad. Toma una nueva foto o quítala para continuar.'
+        );
+        return;
+      }
     }
 
     const duracion = detenerCronometro();
@@ -371,6 +507,12 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
       actor,
       foto: fotoDataUrl,
       observacion: observacion.trim() || undefined,
+      confirmaciones: 1,
+      ultima_confirmacion: fechaHora || obtenerFechaHoraLocalActual(),
+      estado: 'activo',
+      validacion_ia: validacionFoto
+        ? { valida: validacionFoto.valida, resumen: validacionFoto.resumen }
+        : undefined,
       criticidad: {
         puntaje: desglose.puntaje,
         nivel: desglose.nivel,
@@ -380,41 +522,37 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
     onGuardarReporte(nuevoReporte);
     setUltimoGuardado({ reporte: nuevoReporte, duracionSegundos: duracion });
     setObservacion('');
-    setFotoBaseOriginal(undefined);
-    setFotoDataUrl(undefined);
-    setFotoMeta(null);
-    setZonasPrivacidad([]);
-    setAvisoPrivacidad('');
-    setErrorPrivacidad('');
-    if (inputFotoRef.current) inputFotoRef.current.value = '';
+    limpiarFoto();
   };
 
   const colorNivel =
     desglose.nivel === 'Alto'
-      ? 'text-[#DC2626]'
+      ? 'text-[#DC2626] dark:text-red-400'
       : desglose.nivel === 'Medio'
-        ? 'text-[#D97706]'
-        : 'text-[#15803D]';
+        ? 'text-[#D97706] dark:text-amber-400'
+        : 'text-[#15803D] dark:text-emerald-400';
 
   return (
     <section className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
-      <div className="mb-6 flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
+      <div className="mb-6 flex flex-col gap-3 border-b border-slate-200 pb-5 dark:border-slate-800 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-medium text-slate-500">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
             Registro ciudadano y de campo · Meta menor a 30 segundos
           </p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl">
             Reportar obstrucción en Santa Marta
           </h1>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 border border-slate-200 bg-white px-3 py-2 text-xs">
-            <Clock className="h-4 w-4 text-slate-500" />
-            <span className="text-slate-600">Cronómetro:</span>
+          <div className="flex items-center gap-2 border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-900">
+            <Clock className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+            <span className="text-slate-600 dark:text-slate-300">Cronómetro:</span>
             <span
               className={`font-mono font-semibold tabular-nums ${
-                segundosTranscurridos > 30 ? 'text-[#DC2626]' : 'text-slate-900'
+                segundosTranscurridos > 30
+                  ? 'text-[#DC2626] dark:text-red-400'
+                  : 'text-slate-900 dark:text-slate-100'
               }`}
             >
               {segundosTranscurridos.toFixed(1)} s
@@ -423,7 +561,7 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
           <button
             type="button"
             onClick={reiniciarCronometro}
-            className="flex min-h-[40px] items-center gap-1.5 border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap cursor-pointer"
+            className="flex min-h-[40px] items-center gap-1.5 border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap cursor-pointer"
             title="Reiniciar cronómetro de prueba"
           >
             <RotateCcw className="h-3.5 w-3.5" />
@@ -433,18 +571,23 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
       </div>
 
       {ultimoGuardado && (
-        <div className="mb-6 flex flex-col justify-between gap-4 border border-emerald-200 bg-emerald-50/70 p-4 sm:flex-row sm:items-center">
+        <div className="mb-6 flex flex-col justify-between gap-4 border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-800 dark:bg-emerald-950/35 sm:flex-row sm:items-center">
           <div className="flex items-start gap-3">
-            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[#15803D]" />
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[#15803D] dark:text-emerald-400" />
             <div>
-              <p className="text-sm font-semibold text-slate-900">
-                Reporte {ultimoGuardado.reporte.id} guardado en el navegador
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {ultimoGuardado.esConfirmacion
+                  ? `Confirmación (+1) sumada al reporte ${ultimoGuardado.reporte.id} sin duplicar marcador`
+                  : `Reporte ${ultimoGuardado.reporte.id} guardado en el navegador`}
               </p>
-              <p className="mt-0.5 text-xs text-slate-700">
+              <p className="mt-0.5 text-xs text-slate-700 dark:text-slate-300">
                 {ultimoGuardado.reporte.cuadra} · {ETIQUETAS_CATEGORIA[ultimoGuardado.reporte.categoria]} · Criticidad{' '}
                 <strong className="font-mono">
                   {ultimoGuardado.reporte.criticidad.nivel} ({ultimoGuardado.reporte.criticidad.puntaje} pts)
                 </strong>
+                {ultimoGuardado.esConfirmacion && (
+                  <span> · Confirmaciones totales: {ultimoGuardado.reporte.confirmaciones}</span>
+                )}
                 {ultimoGuardado.duracionSegundos !== null && (
                   <span> · Tiempo registrado: {ultimoGuardado.duracionSegundos} s</span>
                 )}
@@ -454,7 +597,7 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
           <button
             type="button"
             onClick={onIrATablero}
-            className="min-h-[44px] bg-[#0B3B69] px-4 py-2 text-xs font-semibold text-white hover:bg-[#082c4f] whitespace-nowrap shrink-0 cursor-pointer"
+            className="min-h-[44px] bg-[#0B3B69] px-4 py-2 text-xs font-semibold text-white hover:bg-[#082c4f] dark:bg-sky-700 dark:hover:bg-sky-600 whitespace-nowrap shrink-0 cursor-pointer"
           >
             Ver en mapa de calor
           </button>
@@ -464,24 +607,32 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
       <form onSubmit={manejarEnviar} className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Columna izquierda: Ubicación en mapa y cuadra */}
         <div className="space-y-4 lg:col-span-6">
-          <div className="border border-slate-200 bg-white p-4">
+          <div className="border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-base font-semibold text-slate-900">
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
                 1. Ubicación en la zona
               </h2>
               <button
                 type="button"
                 onClick={manejarUsarGPS}
                 disabled={buscandoGps}
-                className="flex min-h-[40px] items-center gap-2 bg-[#0B3B69] px-3.5 py-2 text-xs font-medium text-white hover:bg-[#082c4f] disabled:opacity-60 whitespace-nowrap cursor-pointer"
+                className="flex min-h-[40px] items-center gap-2 bg-[#0B3B69] px-3.5 py-2 text-xs font-medium text-white hover:bg-[#082c4f] disabled:opacity-60 dark:bg-sky-700 dark:hover:bg-sky-600 whitespace-nowrap cursor-pointer"
               >
                 <LocateFixed className="h-4 w-4" />
                 {buscandoGps ? 'Ubicando...' : 'Usar mi ubicación'}
               </button>
             </div>
 
-            <p className="mb-3 text-xs text-slate-600">
-              Toca el punto exacto sobre el mapa de Santa Marta o selecciona la cuadra directamente.
+            <div className="mb-3">
+              <BuscadorUbicacion
+                vias={vias}
+                onSeleccionarUbicacion={manejarSeleccionBuscador}
+                compact={true}
+              />
+            </div>
+
+            <p className="mb-3 text-xs text-slate-600 dark:text-slate-400">
+              Toca el punto exacto sobre el mapa de Santa Marta, búscalo por dirección/coordenadas o selecciona la cuadra.
             </p>
 
             <MapaSantaMarta
@@ -493,13 +644,14 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
               puntoEnfocado={{ lat: coordenada.lat, lng: coordenada.lng, zoom: 16 }}
               alturaClase="h-[260px] sm:h-[300px]"
               mostrarControlesCapas={false}
+              esOscuro={esOscuro}
             />
 
             <div className="mt-4 space-y-3">
               <div>
                 <label
                   htmlFor="select-cuadra"
-                  className="mb-1 block text-xs font-medium text-slate-700"
+                  className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-300"
                 >
                   Cuadra clasificada (vias.json)
                 </label>
@@ -507,7 +659,7 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
                   id="select-cuadra"
                   value={cuadraId}
                   onChange={(e) => manejarCambioCuadra(e.target.value)}
-                  className="min-h-[44px] w-full border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[#0B3B69] focus:outline-none"
+                  className="min-h-[44px] w-full border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[#0B3B69] focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 >
                   {vias.map((v) => (
                     <option key={v.id} value={v.id}>
@@ -517,9 +669,9 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
                 </select>
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
                 <span className="flex items-center gap-1.5 font-mono tabular-nums">
-                  <MapPin className="h-3.5 w-3.5 text-[#0B3B69]" />
+                  <MapPin className="h-3.5 w-3.5 text-[#0B3B69] dark:text-sky-400" />
                   {coordenada.lat.toFixed(5)}, {coordenada.lng.toFixed(5)}
                 </span>
                 <span>
@@ -528,37 +680,73 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
               </div>
 
               {estadoGps && (
-                <p className="text-xs text-slate-600">{estadoGps}</p>
+                <p className="text-xs text-slate-600 dark:text-slate-300">{estadoGps}</p>
               )}
             </div>
           </div>
 
+          {/* Alerta de incidente existente cercano: Botón "Volver a reportar (+1)" */}
+          {incidenteCercano && (
+            <div className="border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950/40">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#D97706] dark:text-amber-400" />
+                <div className="flex-1">
+                  <p className="text-xs font-bold text-slate-900 dark:text-amber-200">
+                    Ya existe un reporte activo del mismo tipo a {incidenteCercano.distancia} m (radio configurado: {radioProximidad} m)
+                  </p>
+                  <p className="mt-1 text-xs text-slate-700 dark:text-slate-300">
+                    <span className="font-mono font-semibold">{incidenteCercano.reporte.id}</span> ·{' '}
+                    {ETIQUETAS_CATEGORIA[incidenteCercano.reporte.categoria]} · Confirmaciones:{' '}
+                    <strong className="font-mono tabular-nums">
+                      {Math.max(1, incidenteCercano.reporte.confirmaciones ?? 1)}
+                    </strong>
+                    {' · '}Última:{' '}
+                    <span className="font-mono tabular-nums">
+                      {(incidenteCercano.reporte.ultima_confirmacion ?? incidenteCercano.reporte.fecha_hora).replace('T', ' ')}
+                    </span>
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-400">
+                    Para evitar duplicar marcadores, puedes confirmar que el problema continúa presente:
+                  </p>
+                  <button
+                    type="button"
+                    onClick={manejarVolverAReportarExistente}
+                    className="mt-2.5 inline-flex min-h-[40px] items-center gap-2 bg-[#0B3B69] px-4 py-2 text-xs font-semibold text-white hover:bg-[#082c4f] dark:bg-sky-700 dark:hover:bg-sky-600 cursor-pointer"
+                  >
+                    <PlusCircle className="h-4 w-4" />
+                    Volver a reportar (+1)
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Vista previa automática de criticidad */}
-          <div className="border border-slate-200 bg-white p-4">
+          <div className="border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-500">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 Cálculo automático del índice (RF-02)
               </span>
               <span className={`font-mono text-sm font-bold tabular-nums ${colorNivel}`}>
                 {desglose.nivel} · {desglose.puntaje} pts
               </span>
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 text-xs">
+            <div className="mt-3 grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 text-xs dark:border-slate-800">
               <div>
-                <p className="text-slate-500">Categoría</p>
-                <p className="mt-0.5 font-mono font-semibold text-slate-900 tabular-nums">
+                <p className="text-slate-500 dark:text-slate-400">Categoría</p>
+                <p className="mt-0.5 font-mono font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
                   +{desglose.puntosCategoria} pts
                 </p>
               </div>
               <div>
-                <p className="text-slate-500">{ETIQUETAS_VIA[desglose.tipoVia]}</p>
-                <p className="mt-0.5 font-mono font-semibold text-slate-900 tabular-nums">
+                <p className="text-slate-500 dark:text-slate-400">{ETIQUETAS_VIA[desglose.tipoVia]}</p>
+                <p className="mt-0.5 font-mono font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
                   +{desglose.puntosVia} pts
                 </p>
               </div>
               <div>
-                <p className="text-slate-500">{ETIQUETAS_FRANJA[desglose.franja]}</p>
-                <p className="mt-0.5 font-mono font-semibold text-slate-900 tabular-nums">
+                <p className="text-slate-500 dark:text-slate-400">{ETIQUETAS_FRANJA[desglose.franja]}</p>
+                <p className="mt-0.5 font-mono font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
                   +{desglose.puntosFranja} pts
                 </p>
               </div>
@@ -566,10 +754,10 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
           </div>
         </div>
 
-        {/* Columna derecha: Categoría, Actor, Hora y Foto anonimizada */}
+        {/* Columna derecha: Categoría, Actor, Hora y Foto validada por IA */}
         <div className="space-y-4 lg:col-span-6">
-          <div className="border border-slate-200 bg-white p-4">
-            <h2 className="mb-3 text-base font-semibold text-slate-900">
+          <div className="border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            <h2 className="mb-3 text-base font-semibold text-slate-900 dark:text-slate-100">
               2. Tipo de obstrucción
             </h2>
             <div className="space-y-2">
@@ -585,15 +773,15 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
                     }}
                     className={`flex min-h-[52px] w-full items-center justify-between border px-3.5 py-2.5 text-left transition-colors cursor-pointer ${
                       activo
-                        ? 'border-[#0B3B69] bg-[#0B3B69]/5 text-slate-900'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        ? 'border-[#0B3B69] bg-[#0B3B69]/5 text-slate-900 dark:border-sky-500 dark:bg-sky-950/40 dark:text-slate-100'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
                     }`}
                   >
                     <div className="pr-3">
                       <div className="text-sm font-semibold">{op.titulo}</div>
-                      <div className="text-xs text-slate-500">{op.detalle}</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">{op.detalle}</div>
                     </div>
-                    <span className="font-mono text-xs font-semibold text-slate-600 tabular-nums shrink-0">
+                    <span className="font-mono text-xs font-semibold text-slate-600 dark:text-slate-300 tabular-nums shrink-0">
                       +{criterios.categoria[op.id]} pts
                     </span>
                   </button>
@@ -602,8 +790,8 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
             </div>
           </div>
 
-          <div className="border border-slate-200 bg-white p-4">
-            <h2 className="mb-3 text-base font-semibold text-slate-900">
+          <div className="border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            <h2 className="mb-3 text-base font-semibold text-slate-900 dark:text-slate-100">
               3. Actor que obstruye
             </h2>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -619,8 +807,8 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
                     }}
                     className={`min-h-[48px] border px-3.5 py-2.5 text-left text-sm font-medium transition-colors cursor-pointer ${
                       activo
-                        ? 'border-[#0B3B69] bg-[#0B3B69] text-white'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        ? 'border-[#0B3B69] bg-[#0B3B69] text-white dark:border-sky-500 dark:bg-sky-700'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
                     }`}
                   >
                     {ETIQUETAS_ACTOR[act]}
@@ -630,12 +818,12 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
             </div>
           </div>
 
-          <div className="border border-slate-200 bg-white p-4 space-y-4">
+          <div className="space-y-4 border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label
                   htmlFor="input-fecha-hora"
-                  className="mb-1 block text-xs font-medium text-slate-700"
+                  className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-300"
                 >
                   Fecha y hora del incidente
                 </label>
@@ -647,14 +835,14 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
                     iniciarCronometroSiNoCorre();
                     setFechaHora(e.target.value);
                   }}
-                  className="min-h-[44px] w-full border border-slate-300 bg-white px-3 py-2 font-mono text-xs text-slate-900 focus:border-[#0B3B69] focus:outline-none"
+                  className="min-h-[44px] w-full border border-slate-300 bg-white px-3 py-2 font-mono text-xs text-slate-900 focus:border-[#0B3B69] focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 />
               </div>
 
               <div>
                 <label
                   htmlFor="input-observacion"
-                  className="mb-1 block text-xs font-medium text-slate-700"
+                  className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-300"
                 >
                   Observación breve (opcional)
                 </label>
@@ -665,31 +853,33 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
                   value={observacion}
                   onChange={(e) => setObservacion(e.target.value)}
                   placeholder="Ej. Vehículo detenido sobre la Calle 29H3"
-                  className="min-h-[44px] w-full border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#0B3B69] focus:outline-none"
+                  className="min-h-[44px] w-full border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#0B3B69] focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
                 />
               </div>
             </div>
 
-            {/* Carga de foto con pixelación selectiva automática de rostros y placas */}
-            <div className="border-t border-slate-100 pt-3">
+            {/* Carga de foto con validación inteligente IA + pixelación selectiva automática */}
+            <div className="border-t border-slate-100 pt-3 dark:border-slate-800">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-xs font-semibold text-slate-800">
-                    4. Foto opcional (pixelación automática de rostros y placas)
+                  <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    4. Foto opcional (validación IA y pixelación automática de rostros y placas)
                   </p>
-                  <p className="text-[11px] text-slate-500">
-                    Detectamos rostros y placas al instante para pixelar solo esas zonas y mantener nítido el resto.
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Verificamos nitidez, luz, autenticidad y categoría antes de proteger rostros y placas.
                   </p>
                 </div>
 
-                <label className="flex min-h-[44px] cursor-pointer items-center gap-2 border border-slate-300 bg-slate-50 px-3.5 py-2 text-xs font-medium text-slate-800 hover:bg-slate-100 whitespace-nowrap">
-                  <Camera className="h-4 w-4 text-[#0B3B69]" />
+                <label className="flex min-h-[44px] cursor-pointer items-center gap-2 border border-slate-300 bg-slate-50 px-3.5 py-2 text-xs font-medium text-slate-800 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 whitespace-nowrap">
+                  <Camera className="h-4 w-4 text-[#0B3B69] dark:text-sky-400" />
                   <span>
-                    {procesandoFoto
-                      ? 'Protegiendo foto...'
-                      : fotoDataUrl
-                        ? 'Cambiar foto'
-                        : 'Tomar o adjuntar foto'}
+                    {validandoFoto
+                      ? 'Validando con IA...'
+                      : procesandoFoto
+                        ? 'Protegiendo foto...'
+                        : fotoDataUrl
+                          ? 'Tomar otra foto'
+                          : 'Tomar o adjuntar foto'}
                   </span>
                   <input
                     ref={inputFotoRef}
@@ -703,13 +893,13 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
               </div>
 
               {fotoDataUrl && (
-                <div className="mt-3 border border-slate-200 bg-slate-50 p-3 space-y-3">
+                <div className="mt-3 space-y-3 border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950">
                   <div
                     ref={previewContainerRef}
                     onPointerDown={manejarPointerDown}
                     onPointerMove={manejarPointerMove}
                     onPointerUp={manejarPointerUp}
-                    className="relative mx-auto w-full max-w-md select-none overflow-hidden border border-slate-300 bg-slate-900 touch-none cursor-crosshair"
+                    className="relative mx-auto w-full max-w-md select-none overflow-hidden border border-slate-300 bg-slate-900 touch-none cursor-crosshair dark:border-slate-700"
                   >
                     <img
                       src={fotoDataUrl}
@@ -731,16 +921,61 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
                     )}
                   </div>
 
+                  {/* Resultado de validación inteligente con IA */}
+                  {validandoFoto && (
+                    <div className="flex items-center gap-2 border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
+                      <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                      <span>Analizando calidad, iluminación, autenticidad y categoría con IA...</span>
+                    </div>
+                  )}
+
+                  {!validandoFoto && errorValidacionServicio && (
+                    <div className="flex items-start gap-2 border border-red-300 bg-red-50 px-3 py-2.5 text-xs text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
+                      <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-[#DC2626] dark:text-red-400" />
+                      <div>
+                        <p className="font-semibold">No se pudo validar la fotografía</p>
+                        <p className="mt-0.5">{errorValidacionServicio}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {!validandoFoto && validacionFoto && !validacionFoto.valida && (
+                    <div className="flex items-start gap-2 border border-red-300 bg-red-50 px-3 py-2.5 text-xs text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
+                      <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-[#DC2626] dark:text-red-400" />
+                      <div>
+                        <p className="font-semibold">
+                          Fotografía rechazada · Envío bloqueado
+                        </p>
+                        <p className="mt-0.5">{validacionFoto.motivoRechazo}</p>
+                        <p className="mt-1 text-[11px] opacity-85">
+                          Toma una nueva fotografía clara del incidente o quita la imagen para continuar.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {!validandoFoto && validacionFoto?.valida && (
+                    <div className="space-y-1 border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/35 dark:text-emerald-200">
+                      <div className="flex items-center gap-1.5 font-semibold">
+                        <ShieldCheck className="h-4 w-4 shrink-0 text-[#15803D] dark:text-emerald-400" />
+                        <span>Fotografía validada por IA: {validacionFoto.resumen}</span>
+                      </div>
+                      {avisoPrivacidad && (
+                        <p className="text-[11px] text-emerald-800 dark:text-emerald-300">
+                          {avisoPrivacidad}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                     <div className="space-y-0.5">
-                      <div className="flex items-center gap-1.5 font-medium text-[#15803D]">
-                        <ShieldCheck className="h-4 w-4 shrink-0" />
-                        <span>{avisoPrivacidad || 'Foto lista para guardar'}</span>
-                      </div>
                       {errorPrivacidad && (
-                        <p className="text-[11px] text-[#D97706]">{errorPrivacidad}</p>
+                        <p className="text-[11px] text-[#D97706] dark:text-amber-400">
+                          {errorPrivacidad}
+                        </p>
                       )}
-                      <p className="text-[11px] text-slate-500">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
                         {fotoMeta ? `${fotoMeta.width}×${fotoMeta.height} px · ${fotoMeta.sizeKB} KB · ` : ''}
                         Arrastra sobre la foto si deseas pixelar manualmente una zona adicional.
                       </p>
@@ -750,20 +985,20 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
                       {fotoBaseOriginal && (
                         <button
                           type="button"
-                          disabled={procesandoFoto}
-                          onClick={() => ejecutarDeteccionAutomatica(fotoBaseOriginal)}
-                          className="inline-flex items-center gap-1 border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 cursor-pointer"
+                          disabled={procesandoFoto || validandoFoto}
+                          onClick={() => ejecutarValidacionYPrivacidad(fotoBaseOriginal, categoria, false)}
+                          className="inline-flex items-center gap-1 border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 cursor-pointer"
                         >
                           <RotateCcw className="h-3.5 w-3.5" />
-                          Re-detectar
+                          Revalidar
                         </button>
                       )}
                       {zonasPrivacidad.length > 0 && (
                         <button
                           type="button"
-                          disabled={procesandoFoto}
+                          disabled={procesandoFoto || validandoFoto}
                           onClick={manejarDeshacerUltimaZona}
-                          className="inline-flex items-center gap-1 border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 cursor-pointer"
+                          className="inline-flex items-center gap-1 border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 cursor-pointer"
                         >
                           <Undo2 className="h-3.5 w-3.5" />
                           Deshacer ({zonasPrivacidad.length})
@@ -771,16 +1006,8 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
                       )}
                       <button
                         type="button"
-                        onClick={() => {
-                          setFotoBaseOriginal(undefined);
-                          setFotoDataUrl(undefined);
-                          setFotoMeta(null);
-                          setZonasPrivacidad([]);
-                          setAvisoPrivacidad('');
-                          setErrorPrivacidad('');
-                          if (inputFotoRef.current) inputFotoRef.current.value = '';
-                        }}
-                        className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-[#DC2626] hover:underline cursor-pointer"
+                        onClick={limpiarFoto}
+                        className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-[#DC2626] hover:underline dark:text-red-400 cursor-pointer"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                         Quitar foto
@@ -793,14 +1020,17 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
           </div>
 
           {errorForm && (
-            <p className="text-sm font-medium text-[#DC2626]">{errorForm}</p>
+            <p className="text-sm font-medium text-[#DC2626] dark:text-red-400">{errorForm}</p>
           )}
 
           <button
             type="submit"
-            className="min-h-[52px] w-full bg-[#0B3B69] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#082c4f] cursor-pointer"
+            disabled={fotoBloqueadaPorIA}
+            className="min-h-[52px] w-full bg-[#0B3B69] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#082c4f] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-sky-700 dark:hover:bg-sky-600 cursor-pointer"
           >
-            Guardar reporte en mapa ({desglose.nivel} · {desglose.puntaje} pts)
+            {fotoBloqueadaPorIA
+              ? 'Esperando fotografía válida para guardar'
+              : `Guardar reporte en mapa (${desglose.nivel} · ${desglose.puntaje} pts)`}
           </button>
         </div>
       </form>
