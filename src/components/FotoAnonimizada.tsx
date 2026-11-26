@@ -17,10 +17,25 @@ interface FotoAnonimizadaProps {
   sinRecorte?: boolean;
 }
 
+function normalizarRutaFoto(foto?: string): string | null {
+  if (!foto) return null;
+  const limpia = foto.trim();
+  if (!limpia) return null;
+  if (
+    limpia.startsWith('data:image/') ||
+    limpia.startsWith('http://') ||
+    limpia.startsWith('https://') ||
+    limpia.startsWith('/')
+  ) {
+    return limpia;
+  }
+  return `/${limpia}`;
+}
+
 /**
  * Renderiza la evidencia visual del reporte sin desenfoque general:
- * - Si el usuario cargó una fotografía, se muestra nítida con rostros/placas protegidos.
- * - Si pertenece a los registros precargados de campo, muestra un esquema vectorial nítido.
+ * - Si el registro cuenta con fotografía (archivo local o carga del usuario), se muestra nítida con rostros/placas pixelados.
+ * - Si no existe fotografía o falla la carga, muestra un esquema vectorial nítido.
  */
 export const FotoAnonimizada: React.FC<FotoAnonimizadaProps> = ({
   foto,
@@ -38,13 +53,13 @@ export const FotoAnonimizada: React.FC<FotoAnonimizadaProps> = ({
     setErrorCarga(false);
   }, [foto]);
 
-  const esDataUrl = Boolean(foto && foto.startsWith('data:image/'));
+  const rutaFoto = normalizarRutaFoto(foto);
 
-  if (esDataUrl && !errorCarga && foto) {
+  if (rutaFoto && !errorCarga) {
     return (
       <div className={`relative overflow-hidden bg-slate-900 ${className}`}>
         <img
-          src={foto}
+          src={rutaFoto}
           alt={`Evidencia fotográfica ${reporteId} en ${cuadra}`}
           referrerPolicy="no-referrer"
           draggable={false}

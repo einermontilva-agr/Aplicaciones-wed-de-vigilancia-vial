@@ -493,6 +493,7 @@ async function startServer() {
   });
 
   if (process.env.NODE_ENV !== 'production') {
+    app.use('/fotos', express.static(path.resolve(__dirname, 'public', 'fotos')));
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },

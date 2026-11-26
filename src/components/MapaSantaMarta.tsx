@@ -29,6 +29,7 @@ interface MapaSantaMartaProps {
     lng: number;
     zoom?: number;
     etiqueta?: string;
+    seq?: number;
   } | null;
   alturaClase?: string;
   mostrarControlesCapas?: boolean;
@@ -119,7 +120,7 @@ export const MapaSantaMarta: React.FC<MapaSantaMartaProps> = ({
 
     const mapa = L.map(contenedorRef.current, {
       center: CENTRO_ZONA_UNIMAG,
-      zoom: 15,
+      zoom: modoSeleccion ? 16 : 15,
       zoomControl: true,
     });
 
@@ -505,7 +506,14 @@ export const MapaSantaMarta: React.FC<MapaSantaMartaProps> = ({
       });
       marcadorBuscadoRef.current = pinBuscado;
     }
-  }, [puntoEnfocado, modoSeleccion]);
+  }, [
+    puntoEnfocado?.lat,
+    puntoEnfocado?.lng,
+    puntoEnfocado?.zoom,
+    puntoEnfocado?.etiqueta,
+    puntoEnfocado?.seq,
+    modoSeleccion,
+  ]);
 
   return (
     <div className="relative w-full overflow-hidden border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-900">

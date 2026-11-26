@@ -202,6 +202,29 @@ export async function detectarZonasPrivacidad(
   }
 }
 
+export async function asegurarFotoDataUrl(foto: string): Promise<string> {
+  if (foto.startsWith('data:image/')) return foto;
+  const ruta = foto.startsWith('/') ? foto : `/${foto}`;
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onerror = () => reject(new Error('No se pudo cargar la fotografía para editarla.'));
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('No se pudo inicializar el lienzo de imagen.'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/jpeg', 0.88));
+    };
+    img.src = ruta;
+  });
+}
+
 /**
  * Aplica pixelación irreversible únicamente dentro de las cajas delimitadoras de
  * rostros y placas detectadas, manteniendo nítido el resto de la fotografía.

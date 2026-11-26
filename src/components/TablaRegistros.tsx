@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { CheckCircle2, Eye, Grid2x2, PlusCircle, Search, Sparkles, X } from 'lucide-react';
 import {
   aplicarPixelacionEnZonas,
+  asegurarFotoDataUrl,
   detectarZonasPrivacidad,
 } from '../logic/captura';
 import { calcularCriticidad, obtenerFranja } from '../logic/criticidad';
@@ -95,10 +96,11 @@ export const TablaRegistros: React.FC<TablaRegistrosProps> = ({
   };
 
   const manejarPixelarCompletoModal = async () => {
-    if (!reporteModal?.foto || !reporteModal.foto.startsWith('data:image/') || !onActualizarFotoReporte) return;
+    if (!reporteModal?.foto || !onActualizarFotoReporte) return;
     setPixelandoModal(true);
     setEstadoPixelModal('');
     try {
+      const dataUrl = await asegurarFotoDataUrl(reporteModal.foto);
       const zonaCompleta: ZonaPrivacidad = {
         id: `full-${Date.now()}`,
         tipo: 'manual',
@@ -108,20 +110,23 @@ export const TablaRegistros: React.FC<TablaRegistrosProps> = ({
         ymax: 1000,
         origen: 'manual',
       };
-      const res = await aplicarPixelacionEnZonas(reporteModal.foto, [zonaCompleta], 16);
+      const res = await aplicarPixelacionEnZonas(dataUrl, [zonaCompleta], 16);
       onActualizarFotoReporte(reporteModal.id, res.dataUrl);
       setEstadoPixelModal('Se pixeló toda la fotografía y se guardó el cambio.');
+    } catch {
+      setEstadoPixelModal('No se pudo procesar la fotografía en este momento.');
     } finally {
       setPixelandoModal(false);
     }
   };
 
   const manejarPixelarIAModal = async () => {
-    if (!reporteModal?.foto || !reporteModal.foto.startsWith('data:image/') || !onActualizarFotoReporte) return;
+    if (!reporteModal?.foto || !onActualizarFotoReporte) return;
     setPixelandoModal(true);
     setEstadoPixelModal('');
     try {
-      const { zonas, error } = await detectarZonasPrivacidad(reporteModal.foto);
+      const dataUrl = await asegurarFotoDataUrl(reporteModal.foto);
+      const { zonas, error } = await detectarZonasPrivacidad(dataUrl);
       if (error) {
         setEstadoPixelModal(error);
         return;
@@ -130,9 +135,11 @@ export const TablaRegistros: React.FC<TablaRegistrosProps> = ({
         setEstadoPixelModal('No se detectaron rostros o placas adicionales; toca o arrastra sobre la foto para pixelar manualmente.');
         return;
       }
-      const res = await aplicarPixelacionEnZonas(reporteModal.foto, zonas, 15);
+      const res = await aplicarPixelacionEnZonas(dataUrl, zonas, 15);
       onActualizarFotoReporte(reporteModal.id, res.dataUrl);
       setEstadoPixelModal(`Se pixelaron ${zonas.length} zona(s) detectada(s) automáticamente.`);
+    } catch {
+      setEstadoPixelModal('No se pudo procesar la fotografía en este momento.');
     } finally {
       setPixelandoModal(false);
     }
@@ -143,7 +150,6 @@ export const TablaRegistros: React.FC<TablaRegistrosProps> = ({
       !dibujoModalInicio ||
       !dibujoModalActual ||
       !reporteModal?.foto ||
-      !reporteModal.foto.startsWith('data:image/') ||
       !onActualizarFotoReporte
     ) {
       setDibujoModalInicio(null);
@@ -181,9 +187,12 @@ export const TablaRegistros: React.FC<TablaRegistrosProps> = ({
     setDibujoModalActual(null);
     setPixelandoModal(true);
     try {
-      const res = await aplicarPixelacionEnZonas(reporteModal.foto, [zona], 16);
+      const dataUrl = await asegurarFotoDataUrl(reporteModal.foto);
+      const res = await aplicarPixelacionEnZonas(dataUrl, [zona], 16);
       onActualizarFotoReporte(reporteModal.id, res.dataUrl);
       setEstadoPixelModal('Zona pixelada y guardada en la ficha.');
+    } catch {
+      setEstadoPixelModal('No se pudo pixelar la zona seleccionada.');
     } finally {
       setPixelandoModal(false);
     }
@@ -386,7 +395,7 @@ export const TablaRegistros: React.FC<TablaRegistrosProps> = ({
             </div>
 
             <div className="space-y-4 p-5">
-              {reporteModal.foto && reporteModal.foto.startsWith('data:image/') && onActualizarFotoReporte ? (
+              {reporteModal.foto && onActualizarFotoReporte ? (
                 <div className="space-y-2">
                   <div
                     ref={modalFotoRef}

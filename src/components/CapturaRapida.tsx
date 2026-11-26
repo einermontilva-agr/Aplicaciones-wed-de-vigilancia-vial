@@ -95,9 +95,15 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
 
   const [cuadraId, setCuadraId] = useState<string>(primeraCuadra?.id ?? 'C29H3-T2');
   const [coordenada, setCoordenada] = useState<{ lat: number; lng: number }>({
-    lat: primeraCuadra?.lat ?? 11.2244,
-    lng: primeraCuadra?.lng ?? -74.1909,
+    lat: primeraCuadra?.lat ?? 11.22462,
+    lng: primeraCuadra?.lng ?? -74.19122,
   });
+  const [puntoEnfocado, setPuntoEnfocado] = useState<{
+    lat: number;
+    lng: number;
+    zoom?: number;
+    seq?: number;
+  } | null>(null);
   const [fechaHora, setFechaHora] = useState<string>(() => obtenerFechaHoraLocalActual());
   const [categoria, setCategoria] = useState<CategoriaObstruccion>('invasion_anden');
   const [actor, setActor] = useState<TipoActor>('mobiliario_comercial');
@@ -213,6 +219,7 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
   const manejarSeleccionBuscador = (res: ResultadoBusquedaUbicacion) => {
     iniciarCronometroSiNoCorre();
     setCoordenada({ lat: res.lat, lng: res.lng });
+    setPuntoEnfocado({ lat: res.lat, lng: res.lng, zoom: res.zoom ?? 17, seq: Date.now() });
     const { cuadra, distancia } = encontrarCuadraMasCercana(res.lat, res.lng, vias);
     if (cuadra) {
       setCuadraId(cuadra.id);
@@ -228,6 +235,7 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
     const encontrada = vias.find((v) => v.id === id);
     if (encontrada) {
       setCoordenada({ lat: encontrada.lat, lng: encontrada.lng });
+      setPuntoEnfocado({ lat: encontrada.lat, lng: encontrada.lng, zoom: 17, seq: Date.now() });
       setEstadoGps(`Cuadra seleccionada: ${encontrada.nombre}`);
     }
   };
@@ -250,6 +258,7 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
 
         if (cuadra && distancia <= 3000) {
           setCoordenada({ lat, lng });
+          setPuntoEnfocado({ lat, lng, zoom: 17, seq: Date.now() });
           setCuadraId(cuadra.id);
           setEstadoGps(`GPS capturado (±${Math.round(pos.coords.accuracy)} m) · Cuadra ${cuadra.id}`);
         } else if (cuadra) {
@@ -704,7 +713,7 @@ export const CapturaRapida: React.FC<CapturaRapidaProps> = ({
               modoSeleccion={true}
               coordenadaSeleccionada={coordenada}
               onSeleccionarUbicacion={manejarSeleccionMapa}
-              puntoEnfocado={{ lat: coordenada.lat, lng: coordenada.lng, zoom: 16 }}
+              puntoEnfocado={puntoEnfocado}
               alturaClase="h-[260px] sm:h-[300px]"
               mostrarControlesCapas={false}
               esOscuro={esOscuro}
