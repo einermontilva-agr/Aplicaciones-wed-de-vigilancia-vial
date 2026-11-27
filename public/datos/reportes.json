@@ -9,7 +9,7 @@
     "categoria": "doble_fila",
     "actor": "vehiculo_particular",
     "foto": "fotos/mp-001.jpg",
-    "observacion": "Automóvil estacionado en doble fila sobre la Calle 29H3 reduciendo el flujo vehicular.",
+    "observacion": "Automóvil particular estacionado en doble fila sobre la Calle 29H3 reduciendo el flujo vehicular.",
     "criticidad": { "puntaje": 7, "nivel": "Alto" }
   },
   {
@@ -20,9 +20,9 @@
     "lng": -74.19258,
     "cuadra": "C29H3-T1",
     "categoria": "invasion_anden",
-    "actor": "mobiliario_comercial",
+    "actor": "vehiculo_particular",
     "foto": "fotos/mp-002.jpg",
-    "observacion": "Exhibidores y sombrillas ocupando el andén norte en la Calle 29H3.",
+    "observacion": "Automóvil particular estacionado invadiendo el borde del andén en la Calle 29H3.",
     "criticidad": { "puntaje": 6, "nivel": "Medio" }
   },
   {
@@ -33,9 +33,9 @@
     "lng": -74.19130,
     "cuadra": "VM-T1",
     "categoria": "invasion_anden",
-    "actor": "motocicleta",
+    "actor": "vehiculo_particular",
     "foto": "fotos/mp-003.jpg",
-    "observacion": "Tres motocicletas estacionadas sobre el andén peatonal en Villa Marbella.",
+    "observacion": "Vehículo particular detenido junto al andén peatonal en Villa Marbella.",
     "criticidad": { "puntaje": 4, "nivel": "Bajo" }
   },
   {
@@ -46,9 +46,9 @@
     "lng": -74.19072,
     "cuadra": "VM-T3",
     "categoria": "invasion_anden",
-    "actor": "mobiliario_comercial",
+    "actor": "vehiculo_particular",
     "foto": "fotos/mp-004.jpg",
-    "observacion": "Mesas y vitrinas extendidas hasta el bordillo peatonal en Villa Marbella.",
+    "observacion": "Automóvil particular estacionado junto al bordillo reduciendo el paso peatonal en Villa Marbella.",
     "criticidad": { "puntaje": 4, "nivel": "Bajo" }
   },
   {
@@ -61,7 +61,7 @@
     "categoria": "bloqueo_rampa_cebra_paradero",
     "actor": "vehiculo_particular",
     "foto": "fotos/mp-005.jpg",
-    "observacion": "Vehículo detenido sobre el paso peatonal junto al sector parque de Villa Marbella.",
+    "observacion": "Camioneta particular detenida sobre el paso peatonal junto al sector parque de Villa Marbella.",
     "criticidad": { "puntaje": 5, "nivel": "Medio" }
   },
   {
@@ -74,7 +74,7 @@
     "categoria": "doble_fila",
     "actor": "vehiculo_carga",
     "foto": "fotos/mp-006.jpg",
-    "observacion": "Camión repartidor descargando en doble fila sobre el tramo oriental de la Calle 29H3.",
+    "observacion": "Camión furgón estacionado en doble fila descargando mercancía sobre el tramo oriental de la Calle 29H3.",
     "criticidad": { "puntaje": 7, "nivel": "Alto" }
   },
   {
@@ -87,7 +87,7 @@
     "categoria": "invasion_anden",
     "actor": "vehiculo_carga",
     "foto": "fotos/mp-007.jpg",
-    "observacion": "Furgón montado parcialmente sobre el andén durante descarga de mercancía en Calle 29H3.",
+    "observacion": "Camión de carga estacionado junto al andén durante descargue de material en la Calle 29H3.",
     "criticidad": { "puntaje": 6, "nivel": "Medio" }
   },
   {
@@ -98,9 +98,9 @@
     "lng": -74.19064,
     "cuadra": "VM-T3",
     "categoria": "invasion_anden",
-    "actor": "mobiliario_comercial",
+    "actor": "vehiculo_particular",
     "foto": "fotos/mp-008.jpg",
-    "observacion": "Carros de ventas y canastillas ocupando el andén en Villa Marbella.",
+    "observacion": "Camioneta particular estacionada junto al andén y resalto en Villa Marbella.",
     "criticidad": { "puntaje": 4, "nivel": "Bajo" }
   },
   {
@@ -111,9 +111,9 @@
     "lng": -74.19078,
     "cuadra": "VM-T2",
     "categoria": "bloqueo_rampa_cebra_paradero",
-    "actor": "motocicleta",
+    "actor": "vehiculo_particular",
     "foto": "fotos/mp-009.jpg",
-    "observacion": "Motocicletas estacionadas frente a la rampa peatonal en Villa Marbella.",
+    "observacion": "Camioneta particular estacionada frente al cruce peatonal en Villa Marbella.",
     "criticidad": { "puntaje": 5, "nivel": "Medio" }
   },
   {
@@ -126,7 +126,7 @@
     "categoria": "doble_fila",
     "actor": "vehiculo_particular",
     "foto": "fotos/mp-010.jpg",
-    "observacion": "Vehículo detenido en zona prohibida de la Calle 29H3 bloqueando un carril.",
+    "observacion": "Vehículo particular detenido en zona prohibida de la Calle 29H3 bloqueando un carril.",
     "criticidad": { "puntaje": 7, "nivel": "Alto" }
   },
   {
@@ -137,9 +137,9 @@
     "lng": -74.19136,
     "cuadra": "VM-T1",
     "categoria": "invasion_anden",
-    "actor": "mobiliario_comercial",
+    "actor": "vehiculo_particular",
     "foto": "fotos/mp-011.jpg",
-    "observacion": "Avisos publicitarios y sillas plásticas sobre el andén en Villa Marbella.",
+    "observacion": "Automóvil particular estacionado sobre el borde del andén junto al parque en Villa Marbella.",
     "criticidad": { "puntaje": 4, "nivel": "Bajo" }
   },
   {
@@ -152,7 +152,7 @@
     "categoria": "doble_fila",
     "actor": "vehiculo_particular",
     "foto": "fotos/mp-012.jpg",
-    "observacion": "Automóvil particular estacionado con luces intermitentes obstruyendo la vía en Villa Marbella.",
+    "observacion": "Camioneta particular estacionada obstruyendo la vía residencial en Villa Marbella.",
     "criticidad": { "puntaje": 5, "nivel": "Medio" }
   },
   {
@@ -165,7 +165,7 @@
     "categoria": "doble_fila",
     "actor": "vehiculo_particular",
     "foto": "fotos/mp-013.jpg",
-    "observacion": "Dos automóviles en doble fila en hora pico sobre la Calle 29H3.",
+    "observacion": "Camioneta particular estacionada en doble fila en hora pico sobre la Calle 29H3.",
     "criticidad": { "puntaje": 9, "nivel": "Alto" }
   },
   {
@@ -176,9 +176,9 @@
     "lng": -74.19072,
     "cuadra": "C29H3-T2",
     "categoria": "invasion_anden",
-    "actor": "mobiliario_comercial",
+    "actor": "vehiculo_particular",
     "foto": "fotos/mp-014.jpg",
-    "observacion": "Ventas estacionarias y sombrillas ocupando el andén sobre la Calle 29H3.",
+    "observacion": "Automóvil particular detenido invadiendo la franja lateral sobre la Calle 29H3.",
     "criticidad": { "puntaje": 8, "nivel": "Alto" }
   },
   {
@@ -189,9 +189,9 @@
     "lng": -74.19060,
     "cuadra": "C29H3-T2",
     "categoria": "bloqueo_rampa_cebra_paradero",
-    "actor": "motocicleta",
+    "actor": "vehiculo_particular",
     "foto": "fotos/mp-015.jpg",
-    "observacion": "Mototaxis estacionados sobre la cebra peatonal en la Calle 29H3.",
+    "observacion": "Camioneta particular estacionada frente al cruce peatonal en la Calle 29H3.",
     "criticidad": { "puntaje": 9, "nivel": "Alto" }
   },
   {
@@ -202,9 +202,9 @@
     "lng": -74.19302,
     "cuadra": "C29H3-T1",
     "categoria": "invasion_anden",
-    "actor": "mobiliario_comercial",
+    "actor": "vehiculo_particular",
     "foto": "fotos/mp-016.jpg",
-    "observacion": "Vitrinas y mesas ocupando el andén occidental de la Calle 29H3.",
+    "observacion": "Automóvil particular ocupando el borde del andén occidental de la Calle 29H3.",
     "criticidad": { "puntaje": 8, "nivel": "Alto" }
   },
   {
@@ -215,9 +215,9 @@
     "lng": -74.19281,
     "cuadra": "C29H3-T1",
     "categoria": "invasion_anden",
-    "actor": "mobiliario_comercial",
+    "actor": "vehiculo_particular",
     "foto": "fotos/mp-017.jpg",
-    "observacion": "Exhibidores y sillas obligando a peatones a bajar a la calzada en la Calle 29H3.",
+    "observacion": "Automóvil particular estacionado junto al andén obligando a peatones a bajar a la calzada en la Calle 29H3.",
     "criticidad": { "puntaje": 8, "nivel": "Alto" }
   },
   {
@@ -230,7 +230,7 @@
     "categoria": "doble_fila",
     "actor": "vehiculo_particular",
     "foto": "fotos/mp-018.jpg",
-    "observacion": "Taxi y automóvil particular detenidos en doble fila sobre la Calle 29H3 al mediodía.",
+    "observacion": "Automóvil particular detenido en doble fila sobre la Calle 29H3 al mediodía.",
     "criticidad": { "puntaje": 9, "nivel": "Alto" }
   },
   {
@@ -241,9 +241,9 @@
     "lng": -74.19142,
     "cuadra": "VM-T1",
     "categoria": "bloqueo_rampa_cebra_paradero",
-    "actor": "motocicleta",
+    "actor": "vehiculo_particular",
     "foto": "fotos/mp-019.jpg",
-    "observacion": "Motocicleta bloqueando rampa de accesibilidad para silla de ruedas en Villa Marbella.",
+    "observacion": "Camioneta particular bloqueando rampa de accesibilidad peatonal en Villa Marbella.",
     "criticidad": { "puntaje": 7, "nivel": "Alto" }
   },
   {
@@ -256,7 +256,7 @@
     "categoria": "bloqueo_rampa_cebra_paradero",
     "actor": "vehiculo_particular",
     "foto": "fotos/mp-020.jpg",
-    "observacion": "Vehículo obstruyendo esquina peatonal frente al parque de Villa Marbella.",
+    "observacion": "Camioneta particular obstruyendo esquina peatonal frente al parque de Villa Marbella.",
     "criticidad": { "puntaje": 7, "nivel": "Alto" }
   },
   {
@@ -267,9 +267,9 @@
     "lng": -74.19071,
     "cuadra": "VM-T2",
     "categoria": "bloqueo_rampa_cebra_paradero",
-    "actor": "motocicleta",
+    "actor": "vehiculo_particular",
     "foto": "fotos/mp-021.jpg",
-    "observacion": "Fila de cuatro motos estacionadas sobre el paso peatonal en Villa Marbella.",
+    "observacion": "Camioneta particular estacionada sobre el paso peatonal en Villa Marbella.",
     "criticidad": { "puntaje": 7, "nivel": "Alto" }
   },
   {
@@ -280,9 +280,9 @@
     "lng": -74.18981,
     "cuadra": "C29H3-T3",
     "categoria": "doble_fila",
-    "actor": "vehiculo_carga",
+    "actor": "motocicleta",
     "foto": "fotos/mp-022.jpg",
-    "observacion": "Camión bloqueando carril de la Calle 29H3 mientras descarga víveres.",
+    "observacion": "Motocicleta estacionada en doble fila sobre la Calle 29H3 reduciendo el flujo vehicular.",
     "criticidad": { "puntaje": 9, "nivel": "Alto" }
   },
   {
@@ -293,9 +293,9 @@
     "lng": -74.18906,
     "cuadra": "C29H3-T3",
     "categoria": "bloqueo_rampa_cebra_paradero",
-    "actor": "vehiculo_carga",
+    "actor": "vehiculo_particular",
     "foto": "fotos/mp-023.jpg",
-    "observacion": "Camioneta de reparto estacionada sobre la cebra peatonal de la Calle 29H3.",
+    "observacion": "Camioneta particular estacionada sobre el cruce peatonal de la Calle 29H3.",
     "criticidad": { "puntaje": 9, "nivel": "Alto" }
   },
   {
@@ -306,9 +306,9 @@
     "lng": -74.19012,
     "cuadra": "C29H3-T3",
     "categoria": "doble_fila",
-    "actor": "vehiculo_carga",
+    "actor": "vehiculo_particular",
     "foto": "fotos/mp-024.jpg",
-    "observacion": "Descargue de mercancía en la Calle 29H3 reduciendo el paso vehicular.",
+    "observacion": "Camioneta particular detenida en la Calle 29H3 reduciendo el paso vehicular.",
     "criticidad": { "puntaje": 7, "nivel": "Alto" }
   },
   {
@@ -321,7 +321,7 @@
     "categoria": "doble_fila",
     "actor": "vehiculo_particular",
     "foto": "fotos/mp-025.jpg",
-    "observacion": "Vehículo particular detenido en doble fila sobre el tramo occidental de Calle 29H3.",
+    "observacion": "Vehículo particular detenido en doble fila sobre el tramo occidental de la Calle 29H3.",
     "criticidad": { "puntaje": 7, "nivel": "Alto" }
   },
   {
@@ -334,7 +334,7 @@
     "categoria": "bloqueo_rampa_cebra_paradero",
     "actor": "vehiculo_particular",
     "foto": "fotos/mp-026.jpg",
-    "observacion": "Camioneta obstruyendo rampa peatonal de acceso en Villa Marbella.",
+    "observacion": "Camioneta particular obstruyendo rampa peatonal de acceso en Villa Marbella.",
     "criticidad": { "puntaje": 7, "nivel": "Alto" }
   },
   {
@@ -345,9 +345,9 @@
     "lng": -74.19122,
     "cuadra": "C29H3-T2",
     "categoria": "doble_fila",
-    "actor": "vehiculo_carga",
+    "actor": "vehiculo_particular",
     "foto": "fotos/mp-027.jpg",
-    "observacion": "Vehículo de mensajería detenido en doble fila sobre la Calle 29H3.",
+    "observacion": "Camioneta particular detenida en doble fila sobre la Calle 29H3.",
     "criticidad": { "puntaje": 9, "nivel": "Alto" }
   },
   {
@@ -358,9 +358,9 @@
     "lng": -74.19274,
     "cuadra": "C29H3-T1",
     "categoria": "invasion_anden",
-    "actor": "mobiliario_comercial",
+    "actor": "vehiculo_particular",
     "foto": "fotos/mp-028.jpg",
-    "observacion": "Puesto de accesorios y carpas reduciendo el andén de la Calle 29H3.",
+    "observacion": "Automóvil particular estacionado reduciendo el paso peatonal junto al andén de la Calle 29H3.",
     "criticidad": { "puntaje": 6, "nivel": "Medio" }
   },
   {
@@ -373,7 +373,7 @@
     "categoria": "doble_fila",
     "actor": "motocicleta",
     "foto": "fotos/mp-029.jpg",
-    "observacion": "Mototaxis estacionados en borde prohibido sobre la Calle 29H3.",
+    "observacion": "Motocicleta estacionada en borde prohibido junto al andén de la Calle 29H3.",
     "criticidad": { "puntaje": 7, "nivel": "Alto" }
   },
   {
@@ -384,35 +384,9 @@
     "lng": -74.19100,
     "cuadra": "VM-T2",
     "categoria": "invasion_anden",
-    "actor": "mobiliario_comercial",
+    "actor": "motocicleta",
     "foto": "fotos/mp-030.jpg",
-    "observacion": "Aviso tipo caballete y mesas obstruyendo el andén en Villa Marbella.",
+    "observacion": "Motocicletas estacionadas invadiendo el borde del andén en Villa Marbella.",
     "criticidad": { "puntaje": 4, "nivel": "Bajo" }
-  },
-  {
-    "id": "MP-031",
-    "origen": "campo",
-    "fecha_hora": "2026-11-18T16:05",
-    "lat": 11.22582,
-    "lng": -74.18966,
-    "cuadra": "C29H3-T3",
-    "categoria": "invasion_anden",
-    "actor": "mobiliario_comercial",
-    "foto": "fotos/mp-031.jpg",
-    "observacion": "Cajas de insumos sobre el andén frente a local en la Calle 29H3.",
-    "criticidad": { "puntaje": 6, "nivel": "Medio" }
-  },
-  {
-    "id": "MP-032",
-    "origen": "campo",
-    "fecha_hora": "2026-11-18T16:40",
-    "lat": 11.22307,
-    "lng": -74.19323,
-    "cuadra": "C29H3-T1",
-    "categoria": "doble_fila",
-    "actor": "vehiculo_particular",
-    "foto": "fotos/mp-032.jpg",
-    "observacion": "Automóvil en doble fila sobre el tramo occidental de la Calle 29H3.",
-    "criticidad": { "puntaje": 7, "nivel": "Alto" }
   }
 ]

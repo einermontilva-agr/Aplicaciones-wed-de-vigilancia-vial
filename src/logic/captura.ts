@@ -415,7 +415,7 @@ function agrupadoValido(item: Reporte): boolean {
  * Genera el identificador secuencial siguiente para un reporte ciudadano nuevo.
  */
 export function generarNuevoIdReporte(todos: Reporte[]): string {
-  let maxNum = 32;
+  let maxNum = 30;
   for (const r of todos) {
     const match = /^MP-(\d+)$/i.exec(r.id);
     if (match) {

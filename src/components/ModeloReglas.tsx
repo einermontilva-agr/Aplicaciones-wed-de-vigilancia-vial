@@ -79,7 +79,7 @@ const ARCHIVOS_PROYECTO: { archivo: string; capa: string; responsabilidad: strin
     archivo: 'public/datos/*.json',
     capa: 'Datos',
     responsabilidad:
-      'reportes.json (32 registros de Calle 29H3 y Villa Marbella), vias.json (6 cuadras clasificadas) y criterios.json (pesos, horas pico y rangos modificables sin tocar código).',
+      'reportes.json (30 registros de Calle 29H3 y Villa Marbella), vias.json (6 cuadras clasificadas) y criterios.json (pesos, horas pico y rangos modificables sin tocar código).',
   },
   {
     archivo: 'server.ts',
@@ -127,7 +127,7 @@ const ROLES_EQUIPO = [
   {
     rol: 'Analista de campo y privacidad',
     responsabilidad:
-      'Clasificación de cuadras de Calle 29H3 y Villa Marbella, recorridos en hora pico y valle (32 registros) y verificación de pixelación de rostros y placas.',
+      'Clasificación de cuadras de Calle 29H3 y Villa Marbella, recorridos en hora pico y valle (30 registros) y verificación de pixelación de rostros y placas.',
   },
   {
     rol: 'Integrador del mapa e instrucciones para la IA',
@@ -780,7 +780,7 @@ export const ModeloReglas: React.FC<ModeloReglasProps> = ({
               3. ¿Qué patrones encontraron en la zona?
             </p>
             <p className="mt-1.5 leading-relaxed text-slate-600 dark:text-slate-300">
-              En la Calle 29H3 predominan vehículos particulares y de carga en doble fila e invasión de andén entre las 11:30 y 14:00 (nivel Alto), mientras que en Villa Marbella predominan motocicletas y mobiliario sobre rampas peatonales y andenes.
+              En la Calle 29H3 predominan vehículos particulares, motocicletas y casos puntuales de carga descargando en doble fila e invasión de andén entre las 11:30 y 14:00 (nivel Alto), mientras que en Villa Marbella predominan vehículos particulares y motocicletas sobre rampas peatonales y bordes de andén.
             </p>
           </div>
         </div>
