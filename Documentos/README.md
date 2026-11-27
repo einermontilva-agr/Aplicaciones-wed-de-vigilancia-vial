@@ -10,7 +10,7 @@ Aplicación web ciudadana y operativa para reportar mal parqueo e invasión del 
 | Rol | Integrante | Responsabilidad principal |
 | :--- | :--- | :--- |
 | **Analista de campo y privacidad** | *[EINER BARRERA]* | Clasificación de cuadras (`vias.json`), recorridos pico/valle (32 registros) y verificación de pixelación de rostros/placas |
-| **Integrador del mapa e instrucciones IA** | *[Nombre del integrante 2]* | Mapa base OpenStreetMap, capa de calor (`Leaflet.heat`), zonas agrupadas (15–30 m), buscador y ajuste de prompts |
+| **Integrador del mapa e instrucciones IA** | *[JESUS SILVA]* | Mapa base OpenStreetMap, capa de calor (`Leaflet.heat`), zonas agrupadas (15–30 m), buscador y ajuste de prompts |
 | **Ingeniero de lógica y clasificación** | *[ANDREUZ MACEA]* | Reglas de `criterios.json`, índice de criticidad, filtros sin recarga y resumen operativo Top 5 (`R1`–`R5`) |
 | **Diseñador de interfaz y documentador** | *[JORGE CURVELO]* | Captura rápida (<30 s), tablero con modo oscuro, bitácora de iteración y diagrama de arquitectura |
 
